@@ -48,11 +48,9 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Messages]
-chinesesimplified.BeveledLabel=智能 OCR - 数字文献学
 english.BeveledLabel=Smart OCR - Digital Philology
 
 [Tasks]
