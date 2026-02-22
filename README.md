@@ -41,6 +41,21 @@ macOS 首次打开若提示「无法验证开发者」：右键点击应用 → 
 
 ---
 
+## 界面预览
+
+<table>
+  <tr>
+    <td align="center"><b>主界面</b></td>
+    <td align="center"><b>设置页面</b></td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/软件主界面.png" alt="主界面" width="420"/></td>
+    <td><img src="screenshots/设置页面.png" alt="设置页面" width="420"/></td>
+  </tr>
+</table>
+
+---
+
 ## 状态说明
 
 | 状态 | 含义 |
