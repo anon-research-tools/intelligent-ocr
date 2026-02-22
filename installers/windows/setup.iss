@@ -41,8 +41,6 @@ PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 
 ; Installer appearance
-WizardImageFile=wizard.bmp
-WizardSmallImageFile=wizard_small.bmp
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 ; Architecture
