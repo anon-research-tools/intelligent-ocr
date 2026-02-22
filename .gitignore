@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# PyInstaller build artifacts
+build/
+dist/
+
+# Models (downloaded at runtime)
+models/
+*.pdparams
+*.pdopt
+*.pdiparams
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Logs and temp files
+*.log
+*.tmp
+.ocr_tool/
+
+# Test output
+tests/output/
+tests/tmp/
+*.test.pdf
+
+# Secrets
+.env
+
+# Internal planning docs
+CLAUDE.md
+OPTIMIZATION_PLAN.md

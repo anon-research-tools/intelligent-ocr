@@ -1,0 +1,8 @@
+# Dependencies for web server only
+paddlepaddle>=2.5.0
+paddleocr>=2.7.0
+PyMuPDF>=1.23.0
+numpy>=1.21.0
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6

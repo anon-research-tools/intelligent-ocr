@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  ocr-tool:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ocr_uploads:/tmp/ocr_uploads
+      - ocr_outputs:/tmp/ocr_outputs
+    environment:
+      - UPLOAD_DIR=/tmp/ocr_uploads
+      - OUTPUT_DIR=/tmp/ocr_outputs
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '2'
+          memory: 4G
+
+volumes:
+  ocr_uploads:
+  ocr_outputs:

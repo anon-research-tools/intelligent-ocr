@@ -1,0 +1,6 @@
+# Minimal dependencies for desktop app only
+paddlepaddle>=2.5.0
+paddleocr>=2.7.0
+PyMuPDF>=1.23.0
+numpy>=1.21.0
+PySide6>=6.6.0
