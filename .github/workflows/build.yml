@@ -9,7 +9,7 @@ on:
       version:
         description: 'Version number (e.g. 2.0.2)'
         required: true
-        default: '2.0.2'
+        default: '2.1.0'
 
 jobs:
   build-macos:
@@ -52,6 +52,7 @@ jobs:
   build-macos-intel:
     name: Build macOS DMG (Intel)
     runs-on: macos-13  # GitHub's Intel x86_64 runner
+    continue-on-error: true  # macos-13 runner may be unavailable on some plans
     steps:
       - name: Checkout
         uses: actions/checkout@v4
