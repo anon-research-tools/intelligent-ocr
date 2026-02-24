@@ -91,6 +91,7 @@ class OCRWorker(QThread):
     task_complete = Signal(int, bool, str)  # task_id, success, error_message
     task_status = Signal(int, str)  # task_id, status_message
     all_complete = Signal()
+    model_download_needed = Signal(list)  # list of missing model names
 
     def __init__(
         self,
@@ -187,8 +188,25 @@ class OCRWorker(QThread):
             )
             self._processor_signature = signature
 
+    def notify_models_ready(self):
+        """Called by MainWindow after model download completes (or is aborted)."""
+        if hasattr(self, '_model_download_done'):
+            self._model_download_done.set()
+
     def run(self):
         """Process all tasks, reinitializing OCR engine if language changes."""
+        # Check whether required models are present; if not, notify the main thread
+        # to show a download dialog and wait until download finishes.
+        from core.ocr_engine import OCREngine
+        missing = OCREngine.get_missing_models(self.quality)
+        if missing:
+            self._model_download_done = threading.Event()
+            self.model_download_needed.emit(missing)
+            self._model_download_done.wait()  # blocks until MainWindow calls notify_models_ready()
+            if self._stop_requested:
+                self.all_complete.emit()
+                return
+
         # Initialize with the first task's language
         first_langs = self.tasks[0].languages if self.tasks else self.languages
         try:

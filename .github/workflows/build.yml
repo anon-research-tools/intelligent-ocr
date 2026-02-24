@@ -30,6 +30,11 @@ jobs:
           pip install -r requirements-desktop.txt
           pip install pyinstaller
 
+      - name: Download balanced OCR models for bundling
+        env:
+          PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: '1'
+        run: python scripts/download_models.py
+
       - name: Build with PyInstaller
         env:
           OCR_BUILD_ARCH: arm64
@@ -68,6 +73,11 @@ jobs:
           pip install -r requirements-intel-macos.txt
           pip install pyinstaller
 
+      - name: Download balanced OCR models for bundling
+        env:
+          PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: '1'
+        run: python scripts/download_models.py
+
       - name: Build with PyInstaller
         env:
           OCR_BUILD_ARCH: x86_64
@@ -104,6 +114,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-desktop.txt
           pip install pyinstaller
+
+      - name: Download balanced OCR models for bundling
+        env:
+          PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: '1'
+        run: python scripts/download_models.py
 
       - name: Build with PyInstaller
         run: pyinstaller ocr_tool.spec --noconfirm

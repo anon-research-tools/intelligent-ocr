@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Slot, QSettings
 from PySide6.QtGui import QAction, QKeySequence, QColor
 
-from .widgets import DropZone, FileQueueWidget, SettingsDialog, ProcessDialog
+from .widgets import DropZone, FileQueueWidget, SettingsDialog, ProcessDialog, ModelDownloadDialog
 from .workers import OCRWorker, get_performance_settings
 from .styles import (
     GLOBAL_STYLE, get_button_style, apply_card_shadow,
@@ -33,7 +33,7 @@ class MainWindow(QMainWindow):
     Width: 520px (matching design file)
     """
 
-    VERSION = "2.0.2"
+    VERSION = "2.2.0"
 
     def __init__(self):
         super().__init__()
@@ -533,12 +533,38 @@ class MainWindow(QMainWindow):
         self._current_worker.task_complete.connect(self._on_task_complete)
         self._current_worker.task_status.connect(self._on_task_status)
         self._current_worker.all_complete.connect(self._on_all_complete)
+        self._current_worker.model_download_needed.connect(self._on_model_download_needed)
         self._current_worker.start()
 
         self.start_btn.setText("⏹ 停止")
         self.start_btn.setStyleSheet(get_button_style('danger'))
         self.status_progress.setVisible(True)
         self._update_ui_state()
+
+    @Slot(list)
+    def _on_model_download_needed(self, missing_models: list):
+        """Show download dialog when a quality mode's models are not yet cached."""
+        dlg = ModelDownloadDialog(missing_models, parent=self)
+        # Use DirectConnection so notify_models_ready() is called immediately from
+        # whatever thread emits download_complete.  This avoids a queued-connection
+        # deadlock: OCRWorker's thread has no Qt event loop, so a queued signal
+        # to it would never be delivered while it is blocked on threading.Event.wait().
+        dlg.download_complete.connect(
+            self._current_worker.notify_models_ready,
+            Qt.ConnectionType.DirectConnection,
+        )
+        dlg.download_failed.connect(self._abort_worker)
+        dlg.exec()
+
+    def _abort_worker(self, error: str = ""):
+        """Stop the current worker after a model download failure or cancellation."""
+        # Treat this the same as a user-initiated cancel so _on_all_complete
+        # shows "已取消" and suppresses the "完成: 0/0 成功" popup.
+        self._user_cancelled = True
+        if self._current_worker:
+            self._current_worker.request_stop()
+            # Unblock the threading.Event in run() so the worker thread can exit
+            self._current_worker.notify_models_ready()
 
     @Slot(int, int, int)
     def _on_progress(self, task_id: int, current_page: int, total_pages: int):
@@ -598,6 +624,7 @@ class MainWindow(QMainWindow):
                 self._current_worker.task_complete.disconnect()
                 self._current_worker.task_status.disconnect()
                 self._current_worker.all_complete.disconnect()
+                self._current_worker.model_download_needed.disconnect()
             except RuntimeError:
                 pass  # Already disconnected
         self._current_worker = None
@@ -766,6 +793,7 @@ class MainWindow(QMainWindow):
                 self._current_worker.task_complete.disconnect()
                 self._current_worker.task_status.disconnect()
                 self._current_worker.all_complete.disconnect()
+                self._current_worker.model_download_needed.disconnect()
             except RuntimeError:
                 pass
 

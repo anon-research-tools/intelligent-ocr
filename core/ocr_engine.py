@@ -7,6 +7,25 @@ from typing import Optional
 import numpy as np
 
 
+def _get_bundled_models_dir() -> Optional[Path]:
+    """Return the models/ path bundled inside a PyInstaller frozen app, or None."""
+    import sys
+    if getattr(sys, 'frozen', False):
+        bundled = Path(sys._MEIPASS) / 'models'
+        if bundled.exists():
+            return bundled
+    return None
+
+
+def _get_paddlex_cache_dir() -> Path:
+    """Return the PaddleX official_models cache directory."""
+    import os
+    custom = os.environ.get('PADDLE_PDX_MODEL_DIRS', '')
+    if custom:
+        return Path(custom)
+    return Path.home() / '.paddlex' / 'official_models'
+
+
 @dataclass
 class OCRResult:
     """Single OCR detection result"""
@@ -85,6 +104,38 @@ class OCREngine:
         },
     }
 
+    @staticmethod
+    def is_model_available(model_name: str) -> bool:
+        """Check whether a model is available (bundled or in PaddleX cache).
+
+        PaddleX models contain either inference.pdmodel or inference.pdiparams
+        depending on the model format.  We check for either.
+        """
+        def _has_inference_files(directory: Path) -> bool:
+            return (
+                (directory / 'inference.pdmodel').exists()
+                or (directory / 'inference.pdiparams').exists()
+            )
+
+        # 1. Check inside the frozen bundle
+        bundled = _get_bundled_models_dir()
+        if bundled and _has_inference_files(bundled / model_name):
+            return True
+        # 2. Check PaddleX cache
+        cache = _get_paddlex_cache_dir() / model_name
+        return _has_inference_files(cache)
+
+    @staticmethod
+    def get_missing_models(quality: str) -> list:
+        """Return the list of model names missing for the given quality mode."""
+        config = OCREngine.MODEL_CONFIGS.get(quality, OCREngine.MODEL_CONFIGS['balanced'])
+        missing = []
+        for key in ('text_detection_model_name', 'text_recognition_model_name'):
+            model = config[key]
+            if not OCREngine.is_model_available(model):
+                missing.append(model)
+        return missing
+
     def __init__(
         self,
         languages: list[str] = None,
@@ -158,15 +209,24 @@ class OCREngine:
             'device': self._device_str,
         }
 
-        # Use local models if specified
-        if self.model_dir and self.model_dir.exists():
-            det_model = self.model_dir / f'{primary_lang}_PP-OCRv4_det'
-            rec_model = self.model_dir / f'{primary_lang}_PP-OCRv4_rec'
+        # Resolve model directories: bundled models > PaddleX cache > auto-download
+        bundled_dir = _get_bundled_models_dir()
+        paddlex_cache = _get_paddlex_cache_dir()
 
-            if det_model.exists():
-                ocr_kwargs['text_detection_model_dir'] = str(det_model)
-            if rec_model.exists():
-                ocr_kwargs['text_recognition_model_dir'] = str(rec_model)
+        for model_key, dir_kwarg in [
+            ('text_detection_model_name', 'text_detection_model_dir'),
+            ('text_recognition_model_name', 'text_recognition_model_dir'),
+        ]:
+            model_name = model_config[model_key]
+            # 1. Prefer bundled models (frozen app)
+            if bundled_dir and (bundled_dir / model_name).exists():
+                ocr_kwargs[dir_kwarg] = str(bundled_dir / model_name)
+            else:
+                # 2. Use PaddleX cache if already downloaded
+                cached = paddlex_cache / model_name
+                if cached.exists():
+                    ocr_kwargs[dir_kwarg] = str(cached)
+                # 3. Otherwise let PaddleOCR auto-download (fallback)
 
         self._ocr = PaddleOCR(**ocr_kwargs)
 
