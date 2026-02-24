@@ -6,11 +6,12 @@
 
 | 平台 | 下载 |
 |------|------|
-| 🍎 macOS (Apple Silicon) | [**智能OCR工具_macOS_arm64_v2.0.2.dmg**](https://github.com/anon-research-tools/intelligent-ocr/releases/latest/download/智能OCR工具_macOS_arm64_v2.0.2.dmg) |
-| 🍎 macOS (Intel) | [**智能OCR工具_macOS_intel_v2.0.2.dmg**](https://github.com/anon-research-tools/intelligent-ocr/releases/latest/download/智能OCR工具_macOS_intel_v2.0.2.dmg) |
-| 🪟 Windows 10/11 (64位) | [**智能OCR工具_安装程序_v2.0.2.exe**](https://github.com/anon-research-tools/intelligent-ocr/releases/latest/download/智能OCR工具_安装程序_v2.0.2.exe) |
+| 🍎 macOS (Apple Silicon) | [**智能OCR工具_macOS_arm64_v2.1.0.dmg**](https://github.com/anon-research-tools/intelligent-ocr/releases/download/v2.1.0/智能OCR工具_macOS_arm64_v2.1.0.dmg) |
+| 🪟 Windows 10/11 (64位) | [**智能OCR工具_安装程序_v2.1.0.exe**](https://github.com/anon-research-tools/intelligent-ocr/releases/download/v2.1.0/智能OCR工具_安装程序_v2.1.0.exe) |
 
 👉 [查看所有版本](https://github.com/anon-research-tools/intelligent-ocr/releases)
+
+> **Intel Mac 用户**：v2.1.0 暂无 Intel 构建，请从[历史版本](https://github.com/anon-research-tools/intelligent-ocr/releases/tag/v2.0.2)下载 v2.0.2。
 
 > **首次启动**会自动下载 OCR 模型（约 200MB），需要联网。之后完全离线使用。
 
@@ -152,14 +153,6 @@ ocr_tool/
 └── ocr_tool.spec                # PyInstaller 打包配置
 ```
 
-### 关键设计
-
-**双层 PDF 合成**：使用 PyMuPDF 的 `insert_textbox(render_mode=3)` 将 OCR 文字以不可见模式写入，坐标从图像像素转换为 PDF 点坐标（`zoom = dpi / 72.0`）。竖排文字检测：`rect_height > rect_width × 2` 时改用 `insert_text(rotate=270)`。
-
-**流水线防死锁**：渲染线程通过 `safe_put()` 向队列写入（60 秒超时）。定期保存使用快速模式（`garbage=0, deflate=False`），避免慢速压缩阻塞主线程超过超时阈值导致丢页。
-
-**多进程兼容性**：PaddlePaddle 在 `fork` 模式下因内部 OpenMP 线程池冲突会永久卡住，强制使用 `spawn` 模式。
-
 ---
 
 ## 开发者指南
@@ -189,16 +182,9 @@ python -m pytest tests/ -v            # 运行测试
 推送 tag 即可触发 GitHub Actions 在 macOS 和 Windows 上自动构建并发布 Release：
 
 ```bash
-git tag v2.0.2
-git push origin v2.0.2
+git tag v2.1.0
+git push origin v2.1.0
 ```
-
-### Web 服务环境变量
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `UPLOAD_DIR` | `/tmp/ocr_uploads` | 上传目录 |
-| `OUTPUT_DIR` | `/tmp/ocr_outputs` | 输出目录 |
 
 ---
 
