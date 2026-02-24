@@ -33,27 +33,22 @@ class _DownloadThread(QThread):
             os.environ['PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK'] = '1'
             from paddleocr import PaddleOCR
 
-            DET_MODELS = {'PP-OCRv4_mobile_det', 'PP-OCRv4_server_det'}
-            REC_MODELS = {'PP-OCRv4_mobile_rec', 'PP-OCRv5_server_rec'}
+            # Dynamically detect det/rec models by suffix (works with any PaddleOCR version)
+            det = next((m for m in self.model_names if '_det' in m), None)
+            rec = next((m for m in self.model_names if '_rec' in m), None)
 
-            missing_set = set(self.model_names)
-            det = next((m for m in self.model_names if m in DET_MODELS), 'PP-OCRv4_mobile_det')
-            rec = next((m for m in self.model_names if m in REC_MODELS), 'PP-OCRv5_server_rec')
+            kwargs = {
+                'lang': 'ch',
+                'use_doc_orientation_classify': False,
+                'use_doc_unwarping': False,
+                'use_textline_orientation': False,
+            }
+            if det:
+                kwargs['text_detection_model_name'] = det
+            if rec:
+                kwargs['text_recognition_model_name'] = rec
 
-            # If only one side is missing, keep the default for the other side
-            if not (missing_set & DET_MODELS):
-                det = 'PP-OCRv4_mobile_det'
-            if not (missing_set & REC_MODELS):
-                rec = 'PP-OCRv5_server_rec'
-
-            PaddleOCR(
-                lang='ch',
-                text_detection_model_name=det,
-                text_recognition_model_name=rec,
-                use_doc_orientation_classify=False,
-                use_doc_unwarping=False,
-                use_textline_orientation=True,
-            )
+            PaddleOCR(**kwargs)
             self.finished.emit()
         except Exception as exc:
             self.failed.emit(str(exc))

@@ -8,3 +8,4 @@ PySide6>=6.6.0
 psutil>=5.9.0
 openpyxl>=3.1.0  # Required by paddlex 3.x (not listed in its pip deps)
 lxml>=4.9.0      # Required by paddlex 3.x via tablepyxl.py (not listed in its pip deps)
+premailer>=3.10.0  # Required by paddlex 3.x via tablepyxl.py (not listed in its pip deps)

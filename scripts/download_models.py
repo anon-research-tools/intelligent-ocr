@@ -1,13 +1,5 @@
 #!/usr/bin/env python
-"""
-下载均衡模式 OCR 模型，供 PyInstaller 打包使用。
-
-CI 构建时调用：
-    python scripts/download_models.py
-
-会将 PP-OCRv4_mobile_det 和 PP-OCRv5_server_rec 下载到 models/ 目录，
-PyInstaller 打包时自动包含这两个模型（见 ocr_tool.spec）。
-"""
+"""下载均衡模式 OCR 模型，供 PyInstaller 打包使用。"""
 import os
 import sys
 import shutil
@@ -18,14 +10,20 @@ MODELS_DIR.mkdir(exist_ok=True)
 
 os.environ['PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK'] = '1'
 
-print("Downloading balanced mode models (PP-OCRv4_mobile_det + PP-OCRv5_server_rec)...")
-print(f"Models will be saved to: {MODELS_DIR}")
+REQUIRED_MODELS = [
+    'PP-OCRv5_mobile_det',        # balanced 模式检测
+    'PP-OCRv5_server_rec',        # balanced 模式识别
+    'PP-LCNet_x1_0_textline_ori', # 文本行方向分类
+]
+
+print(f"Downloading balanced mode models: {REQUIRED_MODELS}")
+print(f"Target: {MODELS_DIR}")
 
 from paddleocr import PaddleOCR
 
 PaddleOCR(
     lang='ch',
-    text_detection_model_name='PP-OCRv4_mobile_det',
+    text_detection_model_name='PP-OCRv5_mobile_det',
     text_recognition_model_name='PP-OCRv5_server_rec',
     use_doc_orientation_classify=False,
     use_doc_unwarping=False,
@@ -36,16 +34,25 @@ print("Download complete. Copying to models/ ...")
 
 paddlex_cache = Path.home() / '.paddlex' / 'official_models'
 
-for model_name in ['PP-OCRv4_mobile_det', 'PP-OCRv5_server_rec']:
+for model_name in REQUIRED_MODELS:
     src = paddlex_cache / model_name
     dst = MODELS_DIR / model_name
-    if src.exists() and not dst.exists():
+    if dst.exists():
+        shutil.rmtree(dst)  # 确保是最新版
+    if src.exists():
         shutil.copytree(src, dst)
-        print(f"Copied {model_name} -> models/{model_name}")
-    elif dst.exists():
-        print(f"Already exists: models/{model_name}")
+        print(f"  OK: {model_name}")
     else:
-        print(f"Warning: {model_name} not found in PaddleX cache at {src}")
+        print(f"  FATAL: {model_name} not found at {src}")
+        sys.exit(1)
 
-contents = [p.name for p in MODELS_DIR.iterdir()]
-print(f"Done. models/ contents: {contents}")
+# 严格验证
+for model_name in REQUIRED_MODELS:
+    model_dir = MODELS_DIR / model_name
+    has_files = any(model_dir.glob('inference.*'))
+    if not has_files:
+        print(f"FATAL: {model_name} has no inference files")
+        sys.exit(1)
+
+print(f"All {len(REQUIRED_MODELS)} models verified OK")
+print(f"models/ contents: {[p.name for p in MODELS_DIR.iterdir()]}")

@@ -141,6 +141,7 @@ hiddenimports = [
     'et_xmlfile',
     'cssselect',
     'cssutils',
+    'cachetools',
 ]
 
 # Combine all binaries and hidden imports
@@ -218,8 +219,8 @@ if sys.platform == 'darwin':
         info_plist={
             'CFBundleName': '智能OCR工具',
             'CFBundleDisplayName': '智能 OCR 工具',
-            'CFBundleVersion': '2.2.0',
-            'CFBundleShortVersionString': '2.2.0',
+            'CFBundleVersion': '2.2.1',
+            'CFBundleShortVersionString': '2.2.1',
             'NSHighResolutionCapable': True,
             'LSMinimumSystemVersion': '12.0',
         },

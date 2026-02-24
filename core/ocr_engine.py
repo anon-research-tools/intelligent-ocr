@@ -89,17 +89,17 @@ class OCREngine:
     MODEL_CONFIGS = {
         'fast': {
             # All mobile models - fastest, lower accuracy
-            'text_detection_model_name': 'PP-OCRv4_mobile_det',
-            'text_recognition_model_name': 'PP-OCRv4_mobile_rec',
+            'text_detection_model_name': 'PP-OCRv5_mobile_det',
+            'text_recognition_model_name': 'PP-OCRv5_mobile_rec',
         },
         'balanced': {
             # Mobile detection + server recognition - good balance
-            'text_detection_model_name': 'PP-OCRv4_mobile_det',
+            'text_detection_model_name': 'PP-OCRv5_mobile_det',
             'text_recognition_model_name': 'PP-OCRv5_server_rec',
         },
         'high': {
             # All server models - highest accuracy, slowest
-            'text_detection_model_name': 'PP-OCRv4_server_det',
+            'text_detection_model_name': 'PP-OCRv5_server_det',
             'text_recognition_model_name': 'PP-OCRv5_server_rec',
         },
     }
@@ -227,6 +227,15 @@ class OCREngine:
                 if cached.exists():
                     ocr_kwargs[dir_kwarg] = str(cached)
                 # 3. Otherwise let PaddleOCR auto-download (fallback)
+
+        # Resolve textline orientation model path (PP-LCNet_x1_0_textline_ori)
+        TEXTLINE_MODEL = 'PP-LCNet_x1_0_textline_ori'
+        if bundled_dir and (bundled_dir / TEXTLINE_MODEL).exists():
+            ocr_kwargs['textline_orientation_model_dir'] = str(bundled_dir / TEXTLINE_MODEL)
+        else:
+            cached_tl = paddlex_cache / TEXTLINE_MODEL
+            if cached_tl.exists():
+                ocr_kwargs['textline_orientation_model_dir'] = str(cached_tl)
 
         self._ocr = PaddleOCR(**ocr_kwargs)
 

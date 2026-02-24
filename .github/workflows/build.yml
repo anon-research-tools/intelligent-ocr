@@ -40,6 +40,20 @@ jobs:
           OCR_BUILD_ARCH: arm64
         run: pyinstaller ocr_tool.spec --noconfirm
 
+      - name: Verify build output
+        run: |
+          echo "Checking app bundle..."
+          test -d "dist/智能OCR工具.app" || { echo "FATAL: app bundle missing"; exit 1; }
+          RES="dist/智能OCR工具.app/Contents/Resources"
+          for model in PP-OCRv5_mobile_det PP-OCRv5_server_rec PP-LCNet_x1_0_textline_ori; do
+            if [ -d "$RES/models/$model" ]; then
+              echo "  OK: $model (in Resources)"
+            else
+              echo "FATAL: $model not found in bundle"; exit 1
+            fi
+          done
+          echo "Build verification passed"
+
       - name: Install create-dmg
         run: brew install create-dmg
 
@@ -83,6 +97,20 @@ jobs:
           OCR_BUILD_ARCH: x86_64
         run: pyinstaller ocr_tool.spec --noconfirm
 
+      - name: Verify build output
+        run: |
+          echo "Checking app bundle..."
+          test -d "dist/智能OCR工具.app" || { echo "FATAL: app bundle missing"; exit 1; }
+          RES="dist/智能OCR工具.app/Contents/Resources"
+          for model in PP-OCRv5_mobile_det PP-OCRv5_server_rec PP-LCNet_x1_0_textline_ori; do
+            if [ -d "$RES/models/$model" ]; then
+              echo "  OK: $model (in Resources)"
+            else
+              echo "FATAL: $model not found in bundle"; exit 1
+            fi
+          done
+          echo "Build verification passed"
+
       - name: Install create-dmg
         run: brew install create-dmg
 
@@ -122,6 +150,21 @@ jobs:
 
       - name: Build with PyInstaller
         run: pyinstaller ocr_tool.spec --noconfirm
+
+      - name: Verify build output
+        shell: bash
+        run: |
+          echo "Checking dist directory..."
+          test -d "dist/智能OCR工具" || { echo "FATAL: dist dir missing"; exit 1; }
+          BASE="dist/智能OCR工具"
+          for model in PP-OCRv5_mobile_det PP-OCRv5_server_rec PP-LCNet_x1_0_textline_ori; do
+            if [ -d "$BASE/models/$model" ] || [ -d "$BASE/_internal/models/$model" ]; then
+              echo "  OK: $model"
+            else
+              echo "FATAL: $model not found in bundle"; exit 1
+            fi
+          done
+          echo "Build verification passed"
 
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
