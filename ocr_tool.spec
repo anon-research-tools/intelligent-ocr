@@ -228,8 +228,8 @@ if sys.platform == 'darwin':
         info_plist={
             'CFBundleName': '智能OCR工具',
             'CFBundleDisplayName': '智能 OCR 工具',
-            'CFBundleVersion': '2.2.2',
-            'CFBundleShortVersionString': '2.2.2',
+            'CFBundleVersion': '2.2.3',
+            'CFBundleShortVersionString': '2.2.3',
             'NSHighResolutionCapable': True,
             'LSMinimumSystemVersion': '12.0',
         },
