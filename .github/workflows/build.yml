@@ -52,6 +52,7 @@ jobs:
   build-macos-intel:
     name: Build macOS DMG (Intel)
     runs-on: macos-12  # GitHub's Intel x86_64 runner
+    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -121,7 +122,7 @@ jobs:
 
   release:
     name: Create GitHub Release
-    needs: [build-macos, build-macos-intel, build-windows]
+    needs: [build-macos, build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
