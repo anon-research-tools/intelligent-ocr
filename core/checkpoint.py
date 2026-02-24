@@ -175,7 +175,10 @@ class CheckpointManager:
         with open(temp_path, 'w', encoding='utf-8') as f:
             json.dump(checkpoint.to_dict(), f, ensure_ascii=False, indent=2)
         try:
-            temp_path.rename(checkpoint_path)
+            # os.replace() works atomically and overwrites on Windows
+            # (Path.rename() fails with WinError 183 if target exists)
+            import os
+            os.replace(temp_path, checkpoint_path)
         except OSError:
             temp_path.unlink(missing_ok=True)  # Clean up temp file on failure
             raise
