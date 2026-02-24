@@ -33,7 +33,7 @@ class MainWindow(QMainWindow):
     Width: 520px (matching design file)
     """
 
-    VERSION = "2.0.0"
+    VERSION = "2.0.1"
 
     def __init__(self):
         super().__init__()
@@ -138,7 +138,23 @@ class MainWindow(QMainWindow):
             QPushButton:hover {{ background-color: {COLORS['bg_muted']}; }}
         """)
 
+        self.log_btn = QPushButton("☰")
+        self.log_btn.setFixedSize(36, 36)
+        self.log_btn.setToolTip("查看日志文件夹")
+        self.log_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.log_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['bg_elevated']};
+                color: {COLORS['text_secondary']};
+                border: none;
+                border-radius: 18px;
+                font-size: 16px;
+            }}
+            QPushButton:hover {{ background-color: {COLORS['bg_muted']}; }}
+        """)
+
         header.addLayout(title_container, 1)
+        header.addWidget(self.log_btn)
         header.addWidget(self.settings_btn)
 
         main_layout.addLayout(header)
@@ -356,6 +372,7 @@ class MainWindow(QMainWindow):
         self.clear_btn.clicked.connect(self._on_clear_queue)
         self.start_btn.clicked.connect(self._on_start_processing)
         self.settings_btn.clicked.connect(self._show_settings)
+        self.log_btn.clicked.connect(self._open_log_folder)
 
         self.file_queue.remove_requested.connect(self._on_remove_task)
         self.file_queue.reprocess_requested.connect(self._on_reprocess_task)
@@ -394,6 +411,10 @@ class MainWindow(QMainWindow):
         for path in paths:
             path = Path(path)
             if path.suffix.lower() != '.pdf':
+                continue
+            lowered = path.name.lower()
+            if lowered.startswith('.') or lowered.startswith('._') or lowered.endswith('_temp.pdf') or '_ocr_temp' in lowered:
+                self.status_label.setText(f"跳过临时文件: {path.name}")
                 continue
 
             # Validate PDF before adding to queue
@@ -480,6 +501,9 @@ class MainWindow(QMainWindow):
         if not pending_tasks:
             QMessageBox.information(self, "提示", "没有待处理的文件")
             return
+        settings = QSettings("SmartOCR", "OCRTool")
+        if settings.value("batch/group_by_language", True, type=bool):
+            pending_tasks.sort(key=lambda task: tuple(task.languages or ['ch', 'en']))
 
         self._processing_start_time = datetime.now()
 
@@ -497,10 +521,17 @@ class MainWindow(QMainWindow):
             skip_existing_text=self._settings_cache.get('skip_existing_text', True),
             quality=perf_settings['quality'],
             num_workers=perf_settings['num_workers'],
+            use_gpu=perf_settings.get('use_gpu'),
+            auto_retry_enabled=perf_settings.get('auto_retry_enabled', True),
+            max_retries=perf_settings.get('max_retries', 2),
+            image_mode=perf_settings.get('image_mode', 'lossy_85'),
+            page_retry_limit=perf_settings.get('page_retry_limit', 2),
+            allow_fallback_copy=perf_settings.get('allow_fallback_copy', True),
         )
 
         self._current_worker.progress.connect(self._on_progress)
         self._current_worker.task_complete.connect(self._on_task_complete)
+        self._current_worker.task_status.connect(self._on_task_status)
         self._current_worker.all_complete.connect(self._on_all_complete)
         self._current_worker.start()
 
@@ -553,12 +584,19 @@ class MainWindow(QMainWindow):
 
             self.file_queue.update_task(task)
 
+    @Slot(int, str)
+    def _on_task_status(self, task_id: int, message: str):
+        task = self._tasks.get(task_id)
+        if task and message:
+            self.status_label.setText(f"{task.filename} · {message}")
+
     @Slot()
     def _on_all_complete(self):
         if self._current_worker:
             try:
                 self._current_worker.progress.disconnect()
                 self._current_worker.task_complete.disconnect()
+                self._current_worker.task_status.disconnect()
                 self._current_worker.all_complete.disconnect()
             except RuntimeError:
                 pass  # Already disconnected
@@ -604,6 +642,19 @@ class MainWindow(QMainWindow):
             1 for t in self._tasks.values()
             if t.status == TaskStatus.COMPLETED and t.error_message
         )
+        retried = sum(
+            1 for t in self._tasks.values()
+            if t.status == TaskStatus.COMPLETED and "自动重试成功" in t.error_message
+        )
+        fallback_tasks = [
+            t for t in self._tasks.values()
+            if t.status == TaskStatus.COMPLETED and "回填原页" in t.error_message
+        ]
+        fallback_count = len(fallback_tasks)
+        fallback_detail = ""
+        if fallback_tasks:
+            first_detail = fallback_tasks[0].error_message.split("；")[-1]
+            fallback_detail = f"\n回填详情示例：{first_detail[:120]}"
 
         if failed > 0:
             QMessageBox.warning(
@@ -613,7 +664,7 @@ class MainWindow(QMainWindow):
         elif warned > 0:
             QMessageBox.warning(
                 self, "处理完成",
-                f"全部完成（有警告）\n\n✓ {completed} 个文件处理成功\n⚠ {warned} 个文件存在问题（部分页面已从原文件复制）\n共处理 {total_pages} 页{elapsed}\n\n提示：鼠标悬停在文件状态上可查看详情"
+                f"全部完成（有警告）\n\n✓ {completed} 个文件处理成功\n↻ {retried} 个文件重试恢复\n⚠ {warned} 个文件存在问题\n↯ {fallback_count} 个文件包含回填页\n共处理 {total_pages} 页{elapsed}{fallback_detail}\n\n提示：鼠标悬停在文件状态上可查看详情"
             )
         else:
             per_page = ""
@@ -634,6 +685,17 @@ class MainWindow(QMainWindow):
                     break
 
         self._update_ui_state()
+
+    def _open_log_folder(self):
+        """打開日誌文件夾"""
+        log_dir = Path.home() / ".ocr_tool" / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", str(log_dir)])
+        elif sys.platform == "win32":
+            subprocess.Popen(["explorer", str(log_dir)])
+        else:
+            subprocess.Popen(["xdg-open", str(log_dir)])
 
     def _open_folder(self, file_path: str):
         folder = Path(file_path).parent
@@ -703,6 +765,7 @@ class MainWindow(QMainWindow):
             try:
                 self._current_worker.progress.disconnect()
                 self._current_worker.task_complete.disconnect()
+                self._current_worker.task_status.disconnect()
                 self._current_worker.all_complete.disconnect()
             except RuntimeError:
                 pass

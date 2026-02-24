@@ -278,7 +278,7 @@ class BackgroundProcessor:
 
         with self._init_lock:
             # Create new engine for these settings
-            engine = OCREngine(languages=languages, use_gpu=False)
+            engine = OCREngine(languages=languages)
             processor = PDFProcessor(engine, dpi=dpi)
             return engine, processor
 

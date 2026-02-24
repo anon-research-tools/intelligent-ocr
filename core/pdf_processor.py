@@ -13,9 +13,10 @@ Features:
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+import unicodedata
 from typing import Callable, Optional
 from concurrent.futures import ThreadPoolExecutor
-from queue import Queue
+from queue import Queue, Full
 import threading
 import time
 import numpy as np
@@ -51,6 +52,9 @@ class ProcessResult:
     # Resume information
     resumed_from_checkpoint: bool = False
     resumed_from_page: int = 0
+    fallback_pages: list[int] = field(default_factory=list)
+    page_retry_stats: dict[int, int] = field(default_factory=dict)
+    queue_stall_events: int = 0
 
     @property
     def has_errors(self) -> bool:
@@ -92,6 +96,9 @@ class ProcessResult:
             "per_page_seconds": self.per_page_seconds,
             "resumed_from_checkpoint": self.resumed_from_checkpoint,
             "resumed_from_page": self.resumed_from_page,
+            "fallback_pages": self.fallback_pages,
+            "page_retry_stats": self.page_retry_stats,
+            "queue_stall_events": self.queue_stall_events,
         }
 
 
@@ -377,6 +384,9 @@ class PDFProcessor:
         blank_page_threshold: float = 0.5,
         variants_path: Optional[str] = None,
         num_workers: int = 1,
+        image_mode: str = "lossy_85",
+        page_retry_limit: int = 2,
+        allow_fallback_copy: bool = True,
     ):
         """
         Initialize PDF processor.
@@ -395,6 +405,11 @@ class PDFProcessor:
                 1 = single-process mode (original behavior)
                 >1 = multi-process parallel OCR for faster processing
                 Use parallel_ocr._detect_optimal_workers() to auto-detect.
+            image_mode: Output image insertion mode.
+                - "lossy_85": JPEG quality 85 (smaller output, faster save)
+                - "lossless": use source pixmap (best quality, larger output)
+            page_retry_limit: Page-level OCR retry limit before fallback.
+            allow_fallback_copy: Whether to copy original page after retry exhaustion.
         """
         self.ocr_engine = ocr_engine
         self.dpi = dpi
@@ -403,6 +418,16 @@ class PDFProcessor:
         self.blank_page_threshold = blank_page_threshold
         self.variant_mapper = VariantMapper(variants_path) if variants_path else None
         self.num_workers = max(1, num_workers)
+        self.image_mode = image_mode if image_mode in {"lossy_85", "lossless"} else "lossy_85"
+        self.page_retry_limit = max(0, int(page_retry_limit))
+        self.allow_fallback_copy = allow_fallback_copy
+
+    def _insert_page_image(self, page, rect, pix):
+        """Insert page image using configured output mode."""
+        if self.image_mode == "lossless":
+            page.insert_image(rect, pixmap=pix)
+            return
+        page.insert_image(rect, stream=pix.tobytes("jpeg", jpg_quality=85))
 
     def check_existing_text(self, pdf_path: str) -> bool:
         """
@@ -567,7 +592,7 @@ class PDFProcessor:
         new_page = output_doc.new_page(width=rect.width, height=rect.height)
 
         # Insert original image
-        new_page.insert_image(rect, pixmap=pix)
+        self._insert_page_image(new_page, rect, pix)
 
         # Add invisible text layer
         self._add_text_layer(new_page, ocr_results, pix.height, rect.height, zoom)
@@ -597,7 +622,7 @@ class PDFProcessor:
             if result.confidence < self.min_confidence:
                 continue
 
-            text = result.text.strip()
+            text = unicodedata.normalize('NFKC', result.text.strip())
             if not text:
                 continue
 
@@ -903,7 +928,7 @@ class PDFProcessor:
             if result.confidence < self.min_confidence:
                 continue
 
-            text = result.text.strip()
+            text = unicodedata.normalize('NFKC', result.text.strip())
             if not text:
                 continue
 
@@ -1129,6 +1154,50 @@ class PDFProcessor:
             #       in main thread using _pix_to_bgr_array() just before OCR
             render_queue: Queue = Queue(maxsize=self.prefetch_pages)
             render_error = [None]  # Use list to allow modification in thread
+            ocr_completed_pages: set[int] = set()
+            fallback_pages: set[int] = set()
+
+            def _record_retry(page_num: int):
+                key = page_num + 1
+                result.page_retry_stats[key] = result.page_retry_stats.get(key, 0) + 1
+
+            def _copy_page_with_fallback(page_num: int, reason: str):
+                """Copy original page after retry exhaustion and record details."""
+                if not self.allow_fallback_copy:
+                    raise RuntimeError(f"Page {page_num + 1}: {reason}")
+
+                try:
+                    output_doc.insert_pdf(input_doc, from_page=page_num, to_page=page_num)
+                    fallback_pages.add(page_num)
+                    result.fallback_pages = sorted(p + 1 for p in fallback_pages)
+                    result.errors.append(f"Page {page_num + 1}: OCR失败后回填原页（{reason}）")
+                    if checkpoint and checkpoint_mgr:
+                        checkpoint_mgr.mark_page_failed(checkpoint, page_num)
+                    if progress_callback:
+                        progress_callback(page_num + 1, result.total_pages)
+                except Exception as copy_exc:
+                    raise RuntimeError(
+                        f"Page {page_num + 1}: 回填原页失败（{copy_exc}）"
+                    ) from copy_exc
+
+            def _recognize_with_retry(page_num: int, pix) -> list:
+                """Run OCR with bounded retry on a single page image."""
+                last_error: Optional[Exception] = None
+                for attempt in range(self.page_retry_limit + 1):
+                    if cancel_event and cancel_event.is_set():
+                        raise RuntimeError("处理已取消")
+                    try:
+                        img_array = self._pix_to_bgr_array(pix)
+                        ocr_results = self.ocr_engine.recognize(img_array)
+                        del img_array
+                        return ocr_results
+                    except Exception as exc:
+                        last_error = exc
+                        _record_retry(page_num)
+                        if attempt < self.page_retry_limit:
+                            time.sleep(0.5 * (2 ** attempt))
+                        continue
+                raise RuntimeError(str(last_error) if last_error else "OCR失败")
 
             def render_worker():
                 """Background thread that prefetches page renders"""
@@ -1150,10 +1219,13 @@ class PDFProcessor:
                         try:
                             render_queue.put(item, timeout=0.5)
                             return True
-                        except Exception:
+                        except Full:
                             # Queue full, retry after checking cancel
                             retry_count += 1
+                        except Exception:
+                            retry_count += 1
                     # Max retries exceeded - return False
+                    result.queue_stall_events += 1
                     return False
 
                 try:
@@ -1265,20 +1337,28 @@ class PDFProcessor:
                                 break
 
                             pix, rect, actual_zoom = batch_pixmaps[page_num]
-                            ocr_results = ocr_results_map.get(page_num, [])
+                            ocr_results = ocr_results_map.get(page_num)
+                            if ocr_results is None:
+                                try:
+                                    ocr_results = _recognize_with_retry(page_num, pix)
+                                except Exception as retry_exc:
+                                    _copy_page_with_fallback(page_num, str(retry_exc))
+                                    pix = None
+                                    continue
 
                             try:
                                 # Create new page in output document
                                 new_page = output_doc.new_page(width=rect.width, height=rect.height)
 
                                 # Insert original image
-                                new_page.insert_image(rect, pixmap=pix)
+                                self._insert_page_image(new_page, rect, pix)
 
                                 # Add invisible text layer
                                 # Convert OCRResultDict to compatible format
                                 self._add_text_layer_batched(new_page, ocr_results, actual_zoom)
 
                                 result.processed_pages += 1
+                                ocr_completed_pages.add(page_num)
 
                                 # Mark page as completed in checkpoint
                                 if checkpoint and checkpoint_mgr:
@@ -1292,15 +1372,7 @@ class PDFProcessor:
                                 error_msg = str(e)
                                 full_error = traceback.format_exc()
                                 get_logger().log_debug(full_error, page_num=page_num + 1, file_path=input_path)
-                                result.errors.append(f"Page {page_num + 1}: {error_msg}")
-
-                                if checkpoint and checkpoint_mgr:
-                                    checkpoint_mgr.mark_page_failed(checkpoint, page_num)
-
-                                try:
-                                    output_doc.insert_pdf(input_doc, from_page=page_num, to_page=page_num)
-                                except Exception:
-                                    pass
+                                _copy_page_with_fallback(page_num, error_msg)
 
                             finally:
                                 # Memory cleanup
@@ -1346,13 +1418,7 @@ class PDFProcessor:
                         # Handle potential error in render (7 items = error tuple)
                         if len(item) == 7:
                             page_num, _, _, _, _, _, error_msg = item
-                            result.errors.append(f"Page {page_num + 1}: {error_msg}")
-                            if checkpoint and checkpoint_mgr:
-                                checkpoint_mgr.mark_page_failed(checkpoint, page_num)
-                            try:
-                                output_doc.insert_pdf(input_doc, from_page=page_num, to_page=page_num)
-                            except Exception:
-                                pass
+                            _copy_page_with_fallback(page_num, f"渲染失败: {error_msg}")
                             continue
 
                         # Normal tuple: 6 items
@@ -1392,13 +1458,7 @@ class PDFProcessor:
                     # Handle potential error in render (7 items = error tuple)
                     if len(item) == 7:
                         page_num, _, _, _, _, _, error_msg = item
-                        result.errors.append(f"Page {page_num + 1}: {error_msg}")
-                        if checkpoint and checkpoint_mgr:
-                            checkpoint_mgr.mark_page_failed(checkpoint, page_num)
-                        try:
-                            output_doc.insert_pdf(input_doc, from_page=page_num, to_page=page_num)
-                        except Exception:
-                            pass
+                        _copy_page_with_fallback(page_num, f"渲染失败: {error_msg}")
                         continue
 
                     # Normal tuple: 6 items (no img_array - memory optimized)
@@ -1425,24 +1485,21 @@ class PDFProcessor:
                                 checkpoint_mgr.mark_page_skipped(checkpoint, page_num)
                             continue
 
-                        # Convert pix to BGR array just before OCR (memory optimization)
-                        # This avoids storing both pix and img_array in the queue
-                        img_array = self._pix_to_bgr_array(pix)
-
-                        # Run OCR (serial, quality-critical)
-                        ocr_results = self.ocr_engine.recognize(img_array)
+                        # Run OCR with page-level retry
+                        ocr_results = _recognize_with_retry(page_num, pix)
 
                         # Create new page in output document
                         new_page = output_doc.new_page(width=rect.width, height=rect.height)
 
                         # Insert original image
-                        new_page.insert_image(rect, pixmap=pix)
+                        self._insert_page_image(new_page, rect, pix)
 
                         # Add invisible text layer (batched)
                         # Use actual_zoom (not the requested zoom) for correct coordinate conversion
                         self._add_text_layer_batched(new_page, ocr_results, actual_zoom)
 
                         result.processed_pages += 1
+                        ocr_completed_pages.add(page_num)
 
                         # Mark page as completed in checkpoint
                         if checkpoint and checkpoint_mgr:
@@ -1461,7 +1518,6 @@ class PDFProcessor:
                                 pass  # Don't fail if temp save fails
 
                         # Memory cleanup - release large objects immediately
-                        del img_array
                         pix = None
 
                     except Exception as e:
@@ -1469,15 +1525,7 @@ class PDFProcessor:
                         # Log full traceback for debugging (when OCR_DEBUG=1)
                         full_error = traceback.format_exc()
                         get_logger().log_debug(full_error, page_num=page_num + 1, file_path=input_path)
-                        result.errors.append(f"Page {page_num + 1}: {error_msg}")
-
-                        if checkpoint and checkpoint_mgr:
-                            checkpoint_mgr.mark_page_failed(checkpoint, page_num)
-
-                        try:
-                            output_doc.insert_pdf(input_doc, from_page=page_num, to_page=page_num)
-                        except Exception:
-                            pass
+                        _copy_page_with_fallback(page_num, error_msg)
 
             # Wait for render thread to finish
             render_thread.join(timeout=5.0)
@@ -1485,6 +1533,10 @@ class PDFProcessor:
             # Check for render errors
             if render_error[0]:
                 result.errors.append(f"Render error: {str(render_error[0])}")
+            if result.queue_stall_events > 0:
+                result.errors.append(
+                    f"渲染队列发生阻塞事件 {result.queue_stall_events} 次"
+                )
 
             # Check if cancelled
             was_cancelled = cancel_event and cancel_event.is_set()
@@ -1505,25 +1557,23 @@ class PDFProcessor:
                 result.error_message = "处理已取消，进度已保存"
             else:
                 # Validate output has all pages before saving.
-                # If the render thread timed out (safe_put max_retries exceeded),
-                # some pages may have been silently dropped from the output.
+                # If page production fell behind (queue stall / unexpected break),
+                # fill gaps explicitly and record fallback pages.
                 if len(output_doc) < result.total_pages:
                     missing_start = len(output_doc)
-                    missing_count = result.total_pages - missing_start
-                    # Copy missing pages from input (without OCR text layer)
                     for page_num in range(missing_start, result.total_pages):
-                        try:
-                            output_doc.insert_pdf(input_doc, from_page=page_num, to_page=page_num)
-                        except Exception:
-                            pass
-                    warning_msg = (
-                        f"警告: 第{missing_start+1}-{result.total_pages}页"
-                        f"({missing_count}页)未能完成OCR，已从原文件复制"
+                        _copy_page_with_fallback(page_num, "输出页缺失补齐")
+
+                if result.fallback_pages:
+                    result.errors.append(
+                        f"警告: 共{len(result.fallback_pages)}页OCR失败后回填原页: "
+                        f"{', '.join(map(str, result.fallback_pages[:20]))}"
+                        f"{' ...' if len(result.fallback_pages) > 20 else ''}"
                     )
-                    result.errors.append(warning_msg)
-                    get_logger().log_debug(
-                        warning_msg,
-                        file_path=input_path,
+
+                if len(output_doc) != result.total_pages:
+                    raise RuntimeError(
+                        f"输出页数校验失败: {len(output_doc)} / {result.total_pages}"
                     )
 
                 # Completed - save final output

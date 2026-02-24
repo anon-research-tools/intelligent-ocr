@@ -1,0 +1,9 @@
+# AMD ROCm GPU support (Linux only, requires ROCm 5.7+ drivers)
+# First uninstall CPU-only paddle: pip uninstall paddlepaddle -y
+# Then install:
+paddlepaddle-rocm==2.6.1 -f https://www.paddlepaddle.org.cn/whl/linux/rocm/stable.html
+paddleocr>=2.7.0
+PyMuPDF>=1.23.0
+numpy>=1.21.0
+psutil>=5.9.0
+PySide6>=6.6.0

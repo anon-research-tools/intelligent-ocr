@@ -1,0 +1,8 @@
+# Intel Mac (x86_64) — uses paddlepaddle==3.0.0 (last version with x86_64 macOS wheels)
+# paddlepaddle 3.1.0+ dropped x86_64 macOS support
+paddlepaddle==3.0.0
+paddleocr>=3.0.0
+PyMuPDF>=1.23.0
+numpy>=1.21.0
+PySide6>=6.6.0
+psutil>=5.9.0

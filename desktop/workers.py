@@ -8,6 +8,7 @@ loading PaddleOCR at GUI startup (saves ~500MB memory).
 """
 from pathlib import Path
 import threading
+import time
 from PySide6.QtCore import QThread, Signal, QObject, QSettings
 
 
@@ -88,6 +89,7 @@ class OCRWorker(QThread):
 
     progress = Signal(int, int, int)  # task_id, current_page, total_pages
     task_complete = Signal(int, bool, str)  # task_id, success, error_message
+    task_status = Signal(int, str)  # task_id, status_message
     all_complete = Signal()
 
     def __init__(
@@ -100,6 +102,12 @@ class OCRWorker(QThread):
         quality: str = 'fast',
         enable_checkpoint: bool = True,
         num_workers: int = 1,
+        use_gpu=None,
+        auto_retry_enabled: bool = True,
+        max_retries: int = 2,
+        image_mode: str = "lossy_85",
+        page_retry_limit: int = 2,
+        allow_fallback_copy: bool = True,
         parent=None
     ):
         super().__init__(parent)
@@ -111,13 +119,29 @@ class OCRWorker(QThread):
         self.quality = quality
         self.enable_checkpoint = enable_checkpoint
         self.num_workers = num_workers
+        self.use_gpu = use_gpu
+        self.auto_retry_enabled = auto_retry_enabled
+        self.max_retries = max(0, int(max_retries))
+        self.image_mode = image_mode
+        self.page_retry_limit = max(0, int(page_retry_limit))
+        self.allow_fallback_copy = allow_fallback_copy
         self._stop_requested = False
         self._cancel_event = threading.Event()
 
         self._ocr_engine = None
         self._pdf_processor = None
+        self._processor_signature = None
 
-    def _init_processor(self, languages: list[str] | None = None):
+    def _init_processor(
+        self,
+        languages: list[str] | None = None,
+        *,
+        quality: str | None = None,
+        dpi: int | None = None,
+        num_workers: int | None = None,
+        use_gpu=None,
+        image_mode: str | None = None,
+    ):
         """Initialize or reinitialize OCR engine and processor (lazy import).
 
         Args:
@@ -125,8 +149,21 @@ class OCRWorker(QThread):
                        Pass a new list to reinitialize when languages change.
         """
         langs = languages or self.languages
-        # Reinitialize if languages changed
-        if self._ocr_engine is not None and langs != self._ocr_engine.languages:
+        effective_quality = quality or self.quality
+        effective_dpi = dpi if dpi is not None else self.dpi
+        effective_workers = num_workers if num_workers is not None else self.num_workers
+        effective_gpu = self.use_gpu if use_gpu is None else use_gpu
+        effective_image_mode = image_mode or self.image_mode
+
+        signature = (
+            tuple(langs),
+            effective_quality,
+            effective_dpi,
+            effective_workers,
+            effective_gpu,
+            effective_image_mode,
+        )
+        if self._processor_signature != signature:
             self._ocr_engine = None
             self._pdf_processor = None
 
@@ -136,15 +173,19 @@ class OCRWorker(QThread):
 
             self._ocr_engine = OCREngine(
                 languages=langs,
-                use_gpu=False,
-                quality=self.quality,
+                use_gpu=effective_gpu,
+                quality=effective_quality,
             )
             self._pdf_processor = PDFProcessor(
                 self._ocr_engine,
-                dpi=self.dpi,
+                dpi=effective_dpi,
                 variants_path=_get_variants_path(),
-                num_workers=self.num_workers,
+                num_workers=effective_workers,
+                image_mode=effective_image_mode,
+                page_retry_limit=self.page_retry_limit,
+                allow_fallback_copy=self.allow_fallback_copy,
             )
+            self._processor_signature = signature
 
     def run(self):
         """Process all tasks, reinitializing OCR engine if language changes."""
@@ -165,8 +206,7 @@ class OCRWorker(QThread):
             try:
                 # Reinitialize engine if this task needs different languages
                 task_langs = task.languages if task.languages else self.languages
-                self._init_processor(task_langs)
-                warning = self._process_task(task)
+                warning = self._process_task_with_retry(task, task_langs)
                 # Pass any non-fatal warnings as the error_message (success=True)
                 self.task_complete.emit(task.id, True, warning or "")
             except Exception as e:
@@ -174,12 +214,87 @@ class OCRWorker(QThread):
 
         self.all_complete.emit()
 
-    def _process_task(self, task: Task) -> str:
+    def _classify_error(self, error_message: str) -> str:
+        """Classify errors into retryable / non-retryable / cancelled."""
+        if self._stop_requested or self._cancel_event.is_set():
+            return "cancelled"
+
+        msg = (error_message or "").lower()
+        cancelled_tokens = ["取消", "cancelled", "canceled", "interrupt"]
+        if any(token in msg for token in cancelled_tokens):
+            return "cancelled"
+
+        non_retry_tokens = [
+            "permission denied",
+            "权限",
+            "无权限",
+            "file not found",
+            "不存在",
+            "无法打开pdf",
+            "invalid pdf",
+            "损坏",
+            "corrupt",
+            "encrypted",
+            "密码",
+        ]
+        if any(token in msg for token in non_retry_tokens):
+            return "non_retryable"
+
+        retryable_tokens = [
+            "timeout",
+            "超时",
+            "brokenprocesspool",
+            "worker",
+            "spawn",
+            "killed",
+            "memory",
+            "内存",
+            "resource temporarily unavailable",
+            "temporarily unavailable",
+            "i/o",
+            "ioerror",
+            "cuda",
+            "rocm",
+        ]
+        if any(token in msg for token in retryable_tokens):
+            return "retryable"
+
+        return "non_retryable"
+
+    def _build_attempt_profile(self, attempt_index: int) -> dict:
+        """Build processing parameters for each retry attempt."""
+        profile = {
+            "dpi": self.dpi,
+            "quality": self.quality,
+            "num_workers": self.num_workers,
+            "use_gpu": self.use_gpu,
+            "reason": "原始参数",
+        }
+        if attempt_index == 1:
+            profile["num_workers"] = 1
+            profile["reason"] = "降级为单进程"
+        elif attempt_index >= 2:
+            profile["num_workers"] = 1
+            profile["quality"] = "fast"
+            profile["dpi"] = max(150, self.dpi - 100)
+            profile["reason"] = "单进程 + 快速模式 + 降低DPI"
+        return profile
+
+    def _process_task_once(self, task: Task, task_langs: list[str], profile: dict) -> str:
         """Process a single task using pipelined or standard processing.
 
         Returns:
             Warning message string if any non-fatal issues occurred, else "".
         """
+        self._init_processor(
+            task_langs,
+            quality=profile["quality"],
+            dpi=profile["dpi"],
+            num_workers=profile["num_workers"],
+            use_gpu=profile["use_gpu"],
+            image_mode=self.image_mode,
+        )
+
         def progress_callback(current_page: int, total_pages: int):
             if not self._stop_requested:
                 self.progress.emit(task.id, current_page, total_pages)
@@ -213,6 +328,40 @@ class OCRWorker(QThread):
         # Return any non-fatal warnings (e.g., recovered missing pages)
         return "; ".join(result.errors) if result.errors else ""
 
+    def _process_task_with_retry(self, task: Task, task_langs: list[str]) -> str:
+        """Run one task with bounded retry and progressive fallback."""
+        max_attempts = 1 + (self.max_retries if self.auto_retry_enabled else 0)
+        attempt_errors: list[str] = []
+        recovered_notes: list[str] = []
+
+        for attempt_index in range(max_attempts):
+            profile = self._build_attempt_profile(attempt_index)
+            try:
+                if attempt_index > 0:
+                    self.task_status.emit(
+                        task.id,
+                        f"重试中 ({attempt_index}/{max_attempts - 1}) · {profile['reason']}"
+                    )
+                warning = self._process_task_once(task, task_langs, profile)
+                if attempt_index > 0:
+                    recovered_notes.append(
+                        f"已自动重试成功（第{attempt_index + 1}次，{profile['reason']}）"
+                    )
+                if warning:
+                    recovered_notes.append(warning)
+                return "；".join(recovered_notes)
+            except Exception as exc:
+                error_message = str(exc)
+                error_kind = self._classify_error(error_message)
+                attempt_errors.append(f"尝试{attempt_index + 1}: {error_message}")
+                if error_kind == "cancelled":
+                    raise Exception("处理已取消")
+                if error_kind != "retryable" or attempt_index >= max_attempts - 1:
+                    break
+                time.sleep(1.5 * (2 ** (attempt_index)))
+
+        raise Exception("；".join(attempt_errors))
+
     def request_stop(self):
         """Request worker to stop after current task"""
         self._stop_requested = True
@@ -245,6 +394,10 @@ class SingleFileWorker(QThread):
         enable_checkpoint: bool = True,
         quality: str = 'balanced',
         num_workers: int = 1,
+        use_gpu=None,
+        image_mode: str = "lossy_85",
+        page_retry_limit: int = 2,
+        allow_fallback_copy: bool = True,
         parent=None
     ):
         super().__init__(parent)
@@ -256,6 +409,10 @@ class SingleFileWorker(QThread):
         self.enable_checkpoint = enable_checkpoint
         self.quality = quality
         self.num_workers = num_workers
+        self.use_gpu = use_gpu
+        self.image_mode = image_mode
+        self.page_retry_limit = max(0, int(page_retry_limit))
+        self.allow_fallback_copy = allow_fallback_copy
         self._stop_requested = False
         self._cancel_event = threading.Event()
 
@@ -268,7 +425,7 @@ class SingleFileWorker(QThread):
 
             engine = OCREngine(
                 languages=self.languages,
-                use_gpu=False,
+                use_gpu=self.use_gpu,
                 quality=self.quality,
             )
             processor = PDFProcessor(
@@ -276,6 +433,9 @@ class SingleFileWorker(QThread):
                 dpi=self.dpi,
                 variants_path=_get_variants_path(),
                 num_workers=self.num_workers,
+                image_mode=self.image_mode,
+                page_retry_limit=self.page_retry_limit,
+                allow_fallback_copy=self.allow_fallback_copy,
             )
 
             def progress_callback(current: int, total: int):
@@ -318,8 +478,9 @@ def get_performance_settings() -> dict:
     Get performance settings from QSettings.
 
     Returns:
-        Dict with 'quality' and 'num_workers' keys.
+        Dict with 'quality', 'num_workers', 'use_gpu', retry and image options.
         num_workers=0 means auto-detect.
+        use_gpu=None means auto-detect hardware.
     """
     settings = QSettings("SmartOCR", "OCRTool")
     quality = settings.value("performance/quality", "balanced")
@@ -333,7 +494,34 @@ def get_performance_settings() -> dict:
         except Exception:
             num_workers = 1  # Fallback to single-process
 
+    # GPU override: 'auto' (None), 'cpu' (False), 'gpu' (True)
+    gpu_override = settings.value("performance/gpu_override", "auto")
+    use_gpu = None  # auto-detect
+    if gpu_override == "cpu":
+        use_gpu = False
+    elif gpu_override == "gpu":
+        use_gpu = True
+
+    # Guardrail: GPU mode uses single worker to avoid process contention.
+    is_gpu_mode = False
+    if use_gpu is True:
+        is_gpu_mode = True
+    elif use_gpu is None:
+        try:
+            from core.hardware import get_device_string
+            is_gpu_mode = get_device_string().startswith("gpu")
+        except Exception:
+            is_gpu_mode = False
+    if is_gpu_mode and num_workers > 1:
+        num_workers = 1
+
     return {
         'quality': quality,
         'num_workers': num_workers,
+        'use_gpu': use_gpu,
+        'auto_retry_enabled': settings.value("performance/auto_retry_enabled", True, type=bool),
+        'max_retries': settings.value("performance/max_retries", 2, type=int),
+        'image_mode': settings.value("output/image_mode", "lossy_85"),
+        'page_retry_limit': settings.value("reliability/page_retry_limit", 2, type=int),
+        'allow_fallback_copy': settings.value("reliability/allow_fallback_copy", True, type=bool),
     }

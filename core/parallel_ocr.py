@@ -151,7 +151,7 @@ _process_ocr_engine = None
 _process_quality = None
 
 
-def _init_worker(quality: str):
+def _init_worker(quality: str, use_gpu=None):
     """
     Initialize OCR engine in worker process.
 
@@ -160,6 +160,7 @@ def _init_worker(quality: str):
 
     Args:
         quality: OCR quality mode ('fast', 'balanced', 'high')
+        use_gpu: GPU override (None=auto, True=force GPU, False=force CPU)
     """
     global _process_ocr_engine, _process_quality
     from core.ocr_engine import OCREngine
@@ -167,7 +168,7 @@ def _init_worker(quality: str):
     _process_quality = quality
     _process_ocr_engine = OCREngine(
         languages=['ch', 'en'],
-        use_gpu=False,
+        use_gpu=use_gpu,
         quality=quality,
     )
 
@@ -280,9 +281,11 @@ class ParallelOCRProcessor:
         self,
         quality: str = 'balanced',
         num_workers: Optional[int] = None,
+        use_gpu=None,
     ):
         self.quality = quality
         self.num_workers = num_workers if num_workers is not None else _detect_optimal_workers()
+        self.use_gpu = use_gpu
         self._executor: Optional[ProcessPoolExecutor] = None
         self._started = False
 
@@ -293,7 +296,7 @@ class ParallelOCRProcessor:
         self._executor = ProcessPoolExecutor(
             max_workers=self.num_workers,
             initializer=_init_worker,
-            initargs=(self.quality,),
+            initargs=(self.quality, self.use_gpu),
         )
         self._started = True
         with _registry_lock:
@@ -425,7 +428,7 @@ class ParallelOCRProcessor:
         self,
         tasks: list[tuple[int, bytes]],
         progress_callback: Optional[Callable[[int, int, float, Optional[float]], None]] = None,
-    ) -> dict[int, list[OCRResultDict]]:
+    ) -> dict[int, Optional[list[OCRResultDict]]]:
         """
         Process a batch of pages in parallel.
 
@@ -437,7 +440,7 @@ class ParallelOCRProcessor:
 
         Returns:
             Dict mapping page_num to list of OCRResultDict objects.
-            Failed pages will have empty lists.
+            Failed pages will have value None.
 
         Raises:
             RuntimeError: If processor not started
@@ -448,7 +451,7 @@ class ParallelOCRProcessor:
         if not tasks:
             return {}
 
-        results: dict[int, list[OCRResultDict]] = {}
+        results: dict[int, Optional[list[OCRResultDict]]] = {}
         errors: list[str] = []
         start_time = time.time()
 
@@ -470,7 +473,7 @@ class ParallelOCRProcessor:
 
                 if error_msg:
                     errors.append(f"Page {page_num + 1}: {error_msg}")
-                    results[result_page_num] = []
+                    results[result_page_num] = None
                 else:
                     # Convert dicts back to OCRResultDict objects
                     results[result_page_num] = [
@@ -484,7 +487,7 @@ class ParallelOCRProcessor:
 
             except Exception as e:
                 errors.append(f"Page {page_num + 1}: {str(e)}")
-                results[page_num] = []
+                results[page_num] = None
 
             completed += 1
             elapsed = time.time() - start_time

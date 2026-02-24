@@ -104,7 +104,6 @@ class TaskManager:
 
             self._ocr_engine = OCREngine(
                 languages=self.config.languages,
-                use_gpu=False,
             )
             self._pdf_processor = PDFProcessor(
                 self._ocr_engine,
@@ -127,6 +126,10 @@ class TaskManager:
 
         # Skip hidden files (e.g. .filename_ocr_temp.pdf created by checkpoint system)
         if path.name.startswith('.'):
+            return None
+        lowered = path.name.lower()
+        # Skip temporary/intermediate artifacts that should never be OCR input
+        if lowered.startswith('._') or lowered.endswith('_temp.pdf') or '_ocr_temp' in lowered:
             return None
 
         # Determine output path

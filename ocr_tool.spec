@@ -4,7 +4,10 @@ PyInstaller spec file for 智能 OCR 工具
 Optimized for PaddleOCR packaging with reduced bundle size
 """
 import sys
+import os
 from pathlib import Path
+
+_target_arch = os.environ.get('OCR_BUILD_ARCH', 'arm64')
 
 block_cipher = None
 
@@ -188,7 +191,7 @@ exe = EXE(
     console=False,  # No console window
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch=None,
+    target_arch=_target_arch,
     codesign_identity=None,
     entitlements_file=None,
     icon='desktop/resources/icon.ico' if sys.platform == 'win32' else None,
@@ -215,9 +218,9 @@ if sys.platform == 'darwin':
         info_plist={
             'CFBundleName': '智能OCR工具',
             'CFBundleDisplayName': '智能 OCR 工具',
-            'CFBundleVersion': '1.0.1',
-            'CFBundleShortVersionString': '1.0.1',
+            'CFBundleVersion': '2.0.1',
+            'CFBundleShortVersionString': '2.0.1',
             'NSHighResolutionCapable': True,
-            'LSMinimumSystemVersion': '10.15.0',
+            'LSMinimumSystemVersion': '12.0',
         },
     )

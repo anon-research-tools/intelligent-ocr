@@ -89,7 +89,7 @@ class OCREngine:
         self,
         languages: list[str] = None,
         model_dir: Optional[str] = None,
-        use_gpu: bool = False,
+        use_gpu: Optional[bool] = None,
         use_angle_cls: bool = True,
         quality: str = 'balanced',
     ):
@@ -99,7 +99,10 @@ class OCREngine:
         Args:
             languages: List of language codes ['ch', 'en', 'japan']
             model_dir: Path to local model directory (optional)
-            use_gpu: Whether to use GPU acceleration
+            use_gpu: GPU override.
+                None  → auto-detect (uses core.hardware.get_device_string)
+                True  → force GPU ('gpu:0')
+                False → force CPU
             use_angle_cls: Whether to use angle classification
             quality: Quality/speed trade-off: 'fast', 'balanced', or 'high'
                 - 'fast': All mobile models, ~3x faster, good for most documents
@@ -112,12 +115,31 @@ class OCREngine:
         self.use_angle_cls = use_angle_cls
         self.quality = quality if quality in self.MODEL_CONFIGS else 'balanced'
         self._ocr = None
+        self._device_str = ""
 
         self._init_ocr()
 
     def _init_ocr(self):
         """Initialize PaddleOCR instance"""
+        import logging
         from paddleocr import PaddleOCR
+
+        # Resolve device string based on use_gpu override
+        if self.use_gpu is None:
+            # Auto-detect: use hardware module
+            from core.hardware import get_device_string
+            self._device_str = get_device_string()
+        elif self.use_gpu is True:
+            self._device_str = "gpu:0"
+        else:
+            # False → force CPU
+            from core.hardware import get_device_string
+            self._device_str = get_device_string(force_cpu=True)
+
+        logging.getLogger(__name__).info(
+            "OCREngine: initializing with device=%s quality=%s",
+            self._device_str, self.quality
+        )
 
         # Determine primary language (PaddleOCR uses single lang parameter)
         # Chinese model works well for mixed ch+en text
@@ -133,6 +155,7 @@ class OCREngine:
             'use_doc_orientation_classify': False,  # 禁用整页旋转检测
             'use_doc_unwarping': False,             # 禁用弯曲矫正
             'use_textline_orientation': True,       # 检测竖排/横排文字
+            'device': self._device_str,
         }
 
         # Use local models if specified
@@ -222,4 +245,4 @@ class OCREngine:
             self._init_ocr()
 
     def __repr__(self):
-        return f"OCREngine(languages={self.languages}, quality={self.quality}, use_gpu={self.use_gpu})"
+        return f"OCREngine(languages={self.languages}, quality={self.quality}, device={self._device_str!r})"

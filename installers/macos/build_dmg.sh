@@ -15,8 +15,23 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DIST_DIR="$PROJECT_DIR/dist"
 RESOURCES_DIR="$PROJECT_DIR/desktop/resources"
 APP_NAME="智能OCR工具"
-DMG_NAME="${APP_NAME}_macOS"
-VERSION="1.0.1"
+VERSION="2.0.1"
+
+# Detect architecture of the built app binary
+APP_BINARY="$DIST_DIR/$APP_NAME.app/Contents/MacOS/$APP_NAME"
+if [ -f "$APP_BINARY" ]; then
+    ARCH_RAW=$(file "$APP_BINARY" | grep -oE 'arm64|x86_64|universal' | head -1)
+    case "$ARCH_RAW" in
+        arm64)   ARCH_LABEL="arm64" ;;
+        x86_64)  ARCH_LABEL="intel" ;;
+        universal) ARCH_LABEL="universal" ;;
+        *)       ARCH_LABEL="$(uname -m)" ;;
+    esac
+else
+    ARCH_LABEL="$(uname -m)"
+fi
+
+DMG_NAME="${APP_NAME}_macOS_${ARCH_LABEL}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -151,11 +166,20 @@ fi
 echo ""
 echo -e "${GREEN}Done!${NC}"
 echo ""
+echo "Architecture: $ARCH_LABEL"
+echo "Minimum macOS: 12.0 (Monterey)"
+echo ""
 echo "Next steps:"
 echo "  1. Test the DMG by double-clicking it"
 echo "  2. Drag the app to Applications folder"
 echo "  3. Launch the app and verify it works"
 echo ""
+if [ "$ARCH_LABEL" = "arm64" ]; then
+    echo -e "${YELLOW}Note: This build requires Apple Silicon (M1/M2/M3/M4).${NC}"
+    echo "      Intel Mac users can run it via Rosetta 2:"
+    echo "      softwareupdate --install-rosetta"
+    echo ""
+fi
 echo "For distribution:"
 echo "  - Consider notarizing with: xcrun notarytool submit ${DMG_NAME}_v${VERSION}.dmg"
 echo "  - Or use ad-hoc signing for local testing"

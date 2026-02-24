@@ -2,12 +2,14 @@
 Settings Dialog - Based on Pencil Design File
 Card-based layout with DPI selector and toggle switches
 """
+import threading
+
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QLineEdit, QFileDialog, QFrame,
     QWidget, QComboBox
 )
-from PySide6.QtCore import Qt, QSettings
+from PySide6.QtCore import Qt, QSettings, Signal
 
 from ..styles import COLORS, RADIUS, get_button_style
 
@@ -55,12 +57,14 @@ class ToggleSwitch(QWidget):
 
 class SettingsDialog(QDialog):
     """Modal settings dialog matching the design file."""
+    hardware_status_ready = Signal(str, str, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("设置")
         self.setModal(True)
         self.setFixedWidth(420)
+        self.hardware_status_ready.connect(self._apply_hardware_status)
         self._setup_ui()
         self._load_settings()
         self.adjustSize()
@@ -198,6 +202,53 @@ class SettingsDialog(QDialog):
         
         suffix_row = self._create_row("文件后缀", self.suffix_edit)
         output_layout.addLayout(suffix_row)
+
+        # Separator
+        output_separator = QFrame()
+        output_separator.setFixedHeight(1)
+        output_separator.setStyleSheet(f"background-color: {COLORS['border_subtle']};")
+        output_layout.addWidget(output_separator)
+
+        self.image_mode_combo = QComboBox()
+        self.image_mode_combo.addItem("标准压缩 (推荐，速度快，体积小)", "lossy_85")
+        self.image_mode_combo.addItem("无损画质 (体积大，写入较慢)", "lossless")
+        self.image_mode_combo.setFixedWidth(280)
+        self.image_mode_combo.setStyleSheet(f"""
+            QComboBox {{
+                background: {COLORS['bg_surface']};
+                border: 1px solid {COLORS['border_subtle']};
+                border-radius: 6px;
+                padding: 6px 10px;
+                font-size: 13px;
+                color: {COLORS['text_primary']};
+                font-family: 'Helvetica Neue', 'PingFang SC';
+            }}
+            QComboBox:hover {{
+                border-color: {COLORS['accent_primary']};
+            }}
+            QComboBox::drop-down {{
+                border: none;
+                width: 20px;
+            }}
+            QComboBox::down-arrow {{
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 5px solid {COLORS['text_tertiary']};
+                margin-right: 8px;
+            }}
+            QComboBox QAbstractItemView {{
+                background: {COLORS['bg_primary']};
+                border: 1px solid {COLORS['border_subtle']};
+                border-radius: 6px;
+                selection-background-color: {COLORS['accent_primary']};
+                selection-color: white;
+                padding: 4px;
+            }}
+        """)
+
+        image_mode_row = self._create_row("输出图像", self.image_mode_combo)
+        output_layout.addLayout(image_mode_row)
 
         output_section.addWidget(output_card)
         layout.addLayout(output_section)
@@ -428,6 +479,100 @@ class SettingsDialog(QDialog):
         perf_section.addWidget(perf_card)
         layout.addLayout(perf_section)
 
+        # ============ Hardware Acceleration Section ============
+        hw_section = QVBoxLayout()
+        hw_section.setSpacing(12)
+
+        hw_title = QLabel("硬件加速")
+        hw_title.setStyleSheet(f"""
+            font-size: 14px;
+            font-weight: 600;
+            color: {COLORS['text_primary']};
+            font-family: 'Helvetica Neue', 'PingFang SC';
+        """)
+        hw_section.addWidget(hw_title)
+
+        hw_card = self._create_card()
+        hw_layout = QVBoxLayout(hw_card)
+        hw_layout.setSpacing(0)
+        hw_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Hardware status label (populated at load time)
+        self.hw_status_label = QLabel("检测中…")
+        self.hw_status_label.setStyleSheet(f"""
+            font-size: 13px;
+            color: {COLORS['text_secondary']};
+            font-family: 'Helvetica Neue', 'PingFang SC';
+        """)
+        hw_status_row = self._create_row("当前硬件", self.hw_status_label)
+        hw_layout.addLayout(hw_status_row)
+
+        # Separator
+        sep_hw = QFrame()
+        sep_hw.setFixedHeight(1)
+        sep_hw.setStyleSheet(f"background-color: {COLORS['border_subtle']};")
+        hw_layout.addWidget(sep_hw)
+
+        # GPU override combo box
+        self.gpu_combo = QComboBox()
+        self.gpu_combo.addItem("自动检测 (推荐)", "auto")
+        self.gpu_combo.addItem("强制 CPU", "cpu")
+        self.gpu_combo.addItem("强制 GPU", "gpu")
+        self.gpu_combo.setCurrentIndex(0)
+        self.gpu_combo.setFixedWidth(200)
+        self.gpu_combo.setStyleSheet(f"""
+            QComboBox {{
+                background: {COLORS['bg_surface']};
+                border: 1px solid {COLORS['border_subtle']};
+                border-radius: 6px;
+                padding: 6px 10px;
+                font-size: 13px;
+                color: {COLORS['text_primary']};
+                font-family: 'Helvetica Neue', 'PingFang SC';
+            }}
+            QComboBox:hover {{
+                border-color: {COLORS['accent_primary']};
+            }}
+            QComboBox::drop-down {{
+                border: none;
+                width: 20px;
+            }}
+            QComboBox::down-arrow {{
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 5px solid {COLORS['text_tertiary']};
+                margin-right: 8px;
+            }}
+            QComboBox QAbstractItemView {{
+                background: {COLORS['bg_primary']};
+                border: 1px solid {COLORS['border_subtle']};
+                border-radius: 6px;
+                selection-background-color: {COLORS['accent_primary']};
+                selection-color: white;
+                padding: 4px;
+            }}
+        """)
+        gpu_row = self._create_row("计算设备", self.gpu_combo)
+        hw_layout.addLayout(gpu_row)
+        self.gpu_combo.currentIndexChanged.connect(lambda _: self._warn_gpu_workers_conflict())
+        self.workers_combo.currentIndexChanged.connect(lambda _: self._warn_gpu_workers_conflict())
+
+        # Warning label (shown only when hardware has warnings)
+        self.hw_warning_label = QLabel("")
+        self.hw_warning_label.setWordWrap(True)
+        self.hw_warning_label.setStyleSheet(f"""
+            font-size: 12px;
+            color: #B8860B;
+            padding: 8px 12px;
+            font-family: 'Helvetica Neue', 'PingFang SC';
+        """)
+        self.hw_warning_label.setVisible(False)
+        hw_layout.addWidget(self.hw_warning_label)
+
+        hw_section.addWidget(hw_card)
+        layout.addLayout(hw_section)
+
         # ============ Options Section ============
         options_section = QVBoxLayout()
         options_section.setSpacing(12)
@@ -507,6 +652,61 @@ class SettingsDialog(QDialog):
         btn_row.addWidget(save_btn)
 
         layout.addLayout(btn_row)
+
+    def _apply_hardware_status(self, status: str, color: str, warning_text: str):
+        """Apply hardware status from background detection."""
+        self.hw_status_label.setText(status)
+        self.hw_status_label.setStyleSheet(f"""
+            font-size: 13px;
+            color: {color};
+            font-family: 'Helvetica Neue', 'PingFang SC';
+        """)
+        if warning_text:
+            self.hw_warning_label.setText(warning_text)
+            self.hw_warning_label.setVisible(True)
+        else:
+            self.hw_warning_label.setVisible(False)
+
+    def _refresh_hardware_status(self):
+        """Populate hardware status label from core.hardware in background."""
+        self.hw_status_label.setText("检测中…")
+
+        def _worker():
+            status = "CPU 模式"
+            color = COLORS['text_secondary']
+            warning_text = ""
+            try:
+                import platform
+                from core.hardware import detect_hardware
+                info = detect_hardware()
+
+                if info.recommended_backend == "cuda":
+                    status = f"NVIDIA GPU (CUDA {info.cuda_version}, {info.cuda_gpu_count} 卡)"
+                    color = "#2E7D32"
+                elif info.recommended_backend == "rocm":
+                    status = "AMD GPU (ROCm)"
+                    color = "#2E7D32"
+                elif platform.system() == "Darwin":
+                    status = "Apple CPU (macOS 不支持 GPU 加速)"
+
+                if info.warnings:
+                    warning_text = "\n".join(info.warnings)
+            except Exception as e:
+                status = f"检测失败: {e}"
+            self.hardware_status_ready.emit(status, color, warning_text)
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _warn_gpu_workers_conflict(self):
+        """Show non-blocking warning when GPU override is combined with multi-process."""
+        try:
+            gpu_mode = self.gpu_combo.currentData() in {"gpu"}
+            workers = int(self.workers_combo.currentData())
+            if gpu_mode and workers > 1:
+                self.hw_warning_label.setText("提示：GPU 模式下将自动使用单进程，以避免并发争抢导致卡顿或失败。")
+                self.hw_warning_label.setVisible(True)
+        except Exception:
+            pass
 
     def _on_dpi_clicked(self):
         """Handle DPI button click"""
@@ -600,6 +800,21 @@ class SettingsDialog(QDialog):
         # Performance settings
         settings.setValue("performance/quality", self.quality_combo.currentData())
         settings.setValue("performance/num_workers", self.workers_combo.currentData())
+        settings.setValue("performance/gpu_override", self.gpu_combo.currentData())
+        settings.setValue("output/image_mode", self.image_mode_combo.currentData())
+        settings.setValue("performance/auto_retry_enabled", True)
+        settings.setValue("performance/max_retries", 2)
+        settings.setValue("batch/group_by_language", True)
+        settings.setValue("reliability/page_retry_limit", 2)
+        settings.setValue("reliability/allow_fallback_copy", True)
+        settings.setValue("reliability/show_fallback_detail", True)
+
+        # Clear hardware cache so next OCR run re-evaluates the device
+        try:
+            from core.hardware import clear_cache
+            clear_cache()
+        except Exception:
+            pass
 
     def _load_settings(self):
         settings = QSettings("SmartOCR", "OCRTool")
@@ -616,6 +831,11 @@ class SettingsDialog(QDialog):
                     color: {COLORS['text_primary']};
                     font-family: 'Helvetica Neue', 'PingFang SC';
                 """)
+        image_mode = settings.value("output/image_mode", "lossy_85")
+        for i in range(self.image_mode_combo.count()):
+            if self.image_mode_combo.itemData(i) == image_mode:
+                self.image_mode_combo.setCurrentIndex(i)
+                break
 
         # Load DPI
         dpi = settings.value("quality/dpi", "300")
@@ -658,3 +878,14 @@ class SettingsDialog(QDialog):
             if self.workers_combo.itemData(i) == num_workers:
                 self.workers_combo.setCurrentIndex(i)
                 break
+
+        # Load GPU override
+        gpu_override = settings.value("performance/gpu_override", "auto")
+        for i in range(self.gpu_combo.count()):
+            if self.gpu_combo.itemData(i) == gpu_override:
+                self.gpu_combo.setCurrentIndex(i)
+                break
+
+        # Populate hardware status (best-effort, don't block UI if paddle not installed)
+        self._refresh_hardware_status()
+        self._warn_gpu_workers_conflict()
