@@ -134,6 +134,16 @@ def smoke_test():
         print(f"  FAIL: {e}")
         return 1
 
+    print("Smoke test: verifying OCR engine initialization...")
+    try:
+        engine = OCREngine(languages=['ch', 'en'], quality='balanced')
+        # Force initialization (loads models via PaddleOCR)
+        engine._init_ocr()
+        print("  OK: OCR engine initialized successfully")
+    except Exception as e:
+        print(f"  FAIL: {e}")
+        return 1
+
     print("Smoke test: all checks passed")
     return 0
 

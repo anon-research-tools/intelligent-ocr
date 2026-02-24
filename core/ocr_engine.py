@@ -8,13 +8,66 @@ import numpy as np
 
 
 def _get_bundled_models_dir() -> Optional[Path]:
-    """Return the models/ path bundled inside a PyInstaller frozen app, or None."""
+    """Return the models/ path bundled inside a PyInstaller frozen app, or None.
+
+    On Windows, PaddlePaddle's C++ inference engine cannot load models from
+    paths containing non-ASCII characters (e.g. Chinese install dir).
+    If detected, models are copied to an ASCII-safe cache directory.
+    """
     import sys
-    if getattr(sys, 'frozen', False):
-        bundled = Path(sys._MEIPASS) / 'models'
-        if bundled.exists():
-            return bundled
-    return None
+    if not getattr(sys, 'frozen', False):
+        return None
+    bundled = Path(sys._MEIPASS) / 'models'
+    if not bundled.exists():
+        return None
+
+    # Check if path contains non-ASCII characters (Windows issue)
+    if sys.platform == 'win32':
+        try:
+            str(bundled).encode('ascii')
+        except UnicodeEncodeError:
+            return _copy_models_to_ascii_path(bundled)
+
+    return bundled
+
+
+def _copy_models_to_ascii_path(src_dir: Path) -> Path:
+    """Copy models to an ASCII-safe cache directory for Windows compatibility."""
+    import shutil
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # Use LOCALAPPDATA which is typically C:\Users\<ascii_username>\AppData\Local
+    import os
+    cache_base = Path(os.environ.get('LOCALAPPDATA', Path.home() / 'AppData' / 'Local'))
+    cache_dir = cache_base / 'SmartOCR' / 'models'
+
+    # Check if cache_dir itself has non-ASCII (unlikely but possible)
+    try:
+        str(cache_dir).encode('ascii')
+    except UnicodeEncodeError:
+        # Fallback to temp dir
+        import tempfile
+        cache_dir = Path(tempfile.gettempdir()) / 'SmartOCR' / 'models'
+
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    for model_subdir in src_dir.iterdir():
+        if not model_subdir.is_dir():
+            continue
+        dst = cache_dir / model_subdir.name
+        if dst.exists():
+            # Check if source is newer (by comparing a key file)
+            src_marker = model_subdir / 'inference.pdiparams'
+            dst_marker = dst / 'inference.pdiparams'
+            if src_marker.exists() and dst_marker.exists():
+                if src_marker.stat().st_size == dst_marker.stat().st_size:
+                    continue  # Already up to date
+            shutil.rmtree(dst)
+        logger.info(f"Copying model {model_subdir.name} to ASCII-safe path: {dst}")
+        shutil.copytree(model_subdir, dst)
+
+    return cache_dir
 
 
 def _get_paddlex_cache_dir() -> Path:
