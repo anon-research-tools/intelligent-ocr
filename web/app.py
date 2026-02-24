@@ -62,7 +62,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="OCR Tool API",
     description="Convert scanned PDFs to searchable documents using OCR",
-    version="2.0.1",
+    version="2.0.2",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",

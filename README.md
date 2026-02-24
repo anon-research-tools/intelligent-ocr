@@ -6,9 +6,9 @@
 
 | 平台 | 下载 |
 |------|------|
-| 🍎 macOS (Apple Silicon) | [**智能OCR工具_macOS_arm64_v2.0.1.dmg**](https://github.com/anon-research-tools/intelligent-ocr/releases/latest/download/智能OCR工具_macOS_arm64_v2.0.1.dmg) |
-| 🍎 macOS (Intel) | [**智能OCR工具_macOS_intel_v2.0.1.dmg**](https://github.com/anon-research-tools/intelligent-ocr/releases/latest/download/智能OCR工具_macOS_intel_v2.0.1.dmg) |
-| 🪟 Windows 10/11 (64位) | [**智能OCR工具_安装程序_v2.0.1.exe**](https://github.com/anon-research-tools/intelligent-ocr/releases/latest/download/智能OCR工具_安装程序_v2.0.1.exe) |
+| 🍎 macOS (Apple Silicon) | [**智能OCR工具_macOS_arm64_v2.0.2.dmg**](https://github.com/anon-research-tools/intelligent-ocr/releases/latest/download/智能OCR工具_macOS_arm64_v2.0.2.dmg) |
+| 🍎 macOS (Intel) | [**智能OCR工具_macOS_intel_v2.0.2.dmg**](https://github.com/anon-research-tools/intelligent-ocr/releases/latest/download/智能OCR工具_macOS_intel_v2.0.2.dmg) |
+| 🪟 Windows 10/11 (64位) | [**智能OCR工具_安装程序_v2.0.2.exe**](https://github.com/anon-research-tools/intelligent-ocr/releases/latest/download/智能OCR工具_安装程序_v2.0.2.exe) |
 
 👉 [查看所有版本](https://github.com/anon-research-tools/intelligent-ocr/releases)
 
@@ -189,8 +189,8 @@ python -m pytest tests/ -v            # 运行测试
 推送 tag 即可触发 GitHub Actions 在 macOS 和 Windows 上自动构建并发布 Release：
 
 ```bash
-git tag v2.0.1
-git push origin v2.0.1
+git tag v2.0.2
+git push origin v2.0.2
 ```
 
 ### Web 服务环境变量

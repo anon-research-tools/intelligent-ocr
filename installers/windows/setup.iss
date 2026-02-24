@@ -3,7 +3,7 @@
 ; Download: https://jrsoftware.org/isdownload.php
 
 #define MyAppName "智能OCR工具"
-#define MyAppVersion "2.0.1"
+#define MyAppVersion "2.0.2"
 #define MyAppPublisher "数字文献学"
 #define MyAppURL "https://github.com/anon-research-tools/intelligent-ocr"
 #define MyAppExeName "智能OCR工具.exe"

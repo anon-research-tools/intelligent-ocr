@@ -15,7 +15,7 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DIST_DIR="$PROJECT_DIR/dist"
 RESOURCES_DIR="$PROJECT_DIR/desktop/resources"
 APP_NAME="智能OCR工具"
-VERSION="2.0.1"
+VERSION="2.0.2"
 
 # Detect architecture of the built app binary
 APP_BINARY="$DIST_DIR/$APP_NAME.app/Contents/MacOS/$APP_NAME"

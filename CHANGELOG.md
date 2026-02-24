@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.0.2 (2026-02-24)
+
+### 发布流程
+
+- 调整 GitHub Actions 发布依赖：`Create GitHub Release` 仅依赖 `build-macos` 与 `build-windows`。
+- `build-macos-intel` 改为非阻塞下载，避免 Intel runner 异常时阻断 Windows 与 Apple Silicon 版本发布。
+
 ## v2.0.1 (2026-02-24)
 
 ### 优化与稳定性

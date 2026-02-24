@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version number (e.g. 2.0.1)'
+        description: 'Version number (e.g. 2.0.2)'
         required: true
-        default: '2.0.1'
+        default: '2.0.2'
 
 jobs:
   build-macos:
@@ -121,7 +121,7 @@ jobs:
 
   release:
     name: Create GitHub Release
-    needs: [build-macos, build-macos-intel, build-windows]
+    needs: [build-macos, build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
@@ -134,6 +134,7 @@ jobs:
           path: artifacts/
 
       - name: Download macOS Intel artifact
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: macos-dmg-intel
