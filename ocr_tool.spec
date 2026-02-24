@@ -33,6 +33,15 @@ except Exception as e:
     paddleocr_binaries = []
     paddleocr_hiddenimports = []
 
+# Collect all paddle core (native libs: mklml.dll, etc.)
+try:
+    paddle_datas, paddle_binaries, paddle_hiddenimports = collect_all('paddle')
+    datas += paddle_datas
+except Exception as e:
+    print(f"Warning: Could not collect paddle: {e}")
+    paddle_binaries = []
+    paddle_hiddenimports = []
+
 # Collect all paddlex data (required by new PaddleOCR v5+)
 try:
     paddlex_datas, paddlex_binaries, paddlex_hiddenimports = collect_all('paddlex')
@@ -145,8 +154,8 @@ hiddenimports = [
 ]
 
 # Combine all binaries and hidden imports
-all_binaries = pyside6_binaries + paddleocr_binaries + paddlex_binaries + pypdfium2_binaries + openpyxl_binaries + lxml_binaries
-all_hiddenimports = hiddenimports + pyside6_hiddenimports + paddleocr_hiddenimports + paddlex_hiddenimports + pypdfium2_hiddenimports + openpyxl_hiddenimports + lxml_hiddenimports
+all_binaries = pyside6_binaries + paddle_binaries + paddleocr_binaries + paddlex_binaries + pypdfium2_binaries + openpyxl_binaries + lxml_binaries
+all_hiddenimports = hiddenimports + pyside6_hiddenimports + paddle_hiddenimports + paddleocr_hiddenimports + paddlex_hiddenimports + pypdfium2_hiddenimports + openpyxl_hiddenimports + lxml_hiddenimports
 
 a = Analysis(
     ['main.py'],

@@ -102,7 +102,7 @@ def main():
 
 
 def smoke_test():
-    """Verify all critical imports work in the packaged app.
+    """Verify all critical imports and native libs work in the packaged app.
 
     Used by CI after PyInstaller build to catch missing modules early.
     Returns 0 on success, 1 on failure.
@@ -124,7 +124,17 @@ def smoke_test():
         print(f"  FAIL: {e}")
         return 1
 
-    print("Smoke test: all imports OK")
+    print("Smoke test: verifying paddle inference native libs...")
+    try:
+        import paddle.inference
+        # This triggers loading of native libs (mklml.dll on Windows)
+        config = paddle.inference.Config()
+        print("  OK: paddle.inference native libs")
+    except Exception as e:
+        print(f"  FAIL: {e}")
+        return 1
+
+    print("Smoke test: all checks passed")
     return 0
 
 
