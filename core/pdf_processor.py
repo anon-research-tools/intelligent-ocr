@@ -1320,6 +1320,7 @@ class PDFProcessor:
                     batch_tasks = []  # [(page_num, img_bytes), ...]
                     batch_pixmaps = {}  # page_num -> (pix, rect, actual_zoom)
                     pending_skip_pages = []  # Pages to skip (existing text or blank)
+                    inserted_page_order = []  # Track insertion order for final sort
 
                     def process_ocr_batch():
                         """Process collected batch with parallel OCR"""
@@ -1343,6 +1344,7 @@ class PDFProcessor:
                                     ocr_results = _recognize_with_retry(page_num, pix)
                                 except Exception as retry_exc:
                                     _copy_page_with_fallback(page_num, str(retry_exc))
+                                    inserted_page_order.append(page_num)
                                     pix = None
                                     continue
 
@@ -1359,6 +1361,7 @@ class PDFProcessor:
 
                                 result.processed_pages += 1
                                 ocr_completed_pages.add(page_num)
+                                inserted_page_order.append(page_num)
 
                                 # Mark page as completed in checkpoint
                                 if checkpoint and checkpoint_mgr:
@@ -1373,6 +1376,7 @@ class PDFProcessor:
                                 full_error = traceback.format_exc()
                                 get_logger().log_debug(full_error, page_num=page_num + 1, file_path=input_path)
                                 _copy_page_with_fallback(page_num, error_msg)
+                                inserted_page_order.append(page_num)
 
                             finally:
                                 # Memory cleanup
@@ -1397,6 +1401,7 @@ class PDFProcessor:
                         for skip_item in pending_skip_pages:
                             page_num, is_existing = skip_item
                             output_doc.insert_pdf(input_doc, from_page=page_num, to_page=page_num)
+                            inserted_page_order.append(page_num)
                             result.skipped_pages += 1
                             if checkpoint and checkpoint_mgr:
                                 checkpoint_mgr.mark_page_skipped(checkpoint, page_num)
@@ -1444,6 +1449,15 @@ class PDFProcessor:
 
                 finally:
                     parallel_processor.stop()
+
+                # Fix page order: skip pages inserted before OCR batches can cause wrong order.
+                # e.g. pages [0(ocr),1(skip),2(ocr)] get inserted as [1,0,2] instead of [0,1,2].
+                if (inserted_page_order and
+                        inserted_page_order != sorted(inserted_page_order) and
+                        len(inserted_page_order) == len(output_doc)):
+                    sort_indices = sorted(range(len(inserted_page_order)),
+                                         key=lambda i: inserted_page_order[i])
+                    output_doc.select(sort_indices)
 
             else:
                 # Single-process mode (original behavior)

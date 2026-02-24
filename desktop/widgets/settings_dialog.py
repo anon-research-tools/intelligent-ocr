@@ -7,7 +7,7 @@ import threading
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QLineEdit, QFileDialog, QFrame,
-    QWidget, QComboBox
+    QWidget, QComboBox, QScrollArea, QApplication
 )
 from PySide6.QtCore import Qt, QSettings, Signal
 
@@ -63,11 +63,11 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("设置")
         self.setModal(True)
-        self.setFixedWidth(420)
+        self.setFixedWidth(460)
         self.hardware_status_ready.connect(self._apply_hardware_status)
         self._setup_ui()
         self._load_settings()
-        self.adjustSize()
+        self._adjust_height()
 
     def _create_card(self):
         """Create a card container"""
@@ -101,14 +101,29 @@ class SettingsDialog(QDialog):
         
         return row
 
-    def _setup_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(20)
+    def _adjust_height(self):
+        """Fit dialog height to screen, enabling scroll if content is taller."""
+        screen = QApplication.primaryScreen()
+        if screen:
+            available = screen.availableGeometry()
+            max_h = available.height() - 80  # leave some margin
+        else:
+            max_h = 700
 
-        # Header with title and close button
+        self.adjustSize()
+        if self.height() > max_h:
+            self.setFixedHeight(max_h)
+
+    def _setup_ui(self):
+        # Outer layout: header (fixed) + scroll area + buttons (fixed)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setSpacing(0)
+
+        # ── Header (always visible, not scrollable) ──────────────────────
         header = QHBoxLayout()
-        
+        header.setContentsMargins(0, 0, 0, 16)
+
         title = QLabel("设置")
         title.setStyleSheet(f"""
             font-size: 18px;
@@ -116,7 +131,7 @@ class SettingsDialog(QDialog):
             color: {COLORS['text_primary']};
             font-family: 'Helvetica Neue', 'PingFang SC';
         """)
-        
+
         close_btn = QPushButton("✕")
         close_btn.setFixedSize(28, 28)
         close_btn.setStyleSheet(f"""
@@ -131,12 +146,27 @@ class SettingsDialog(QDialog):
             QPushButton:hover {{ background-color: {COLORS['border_subtle']}; }}
         """)
         close_btn.clicked.connect(self.reject)
-        
+
         header.addWidget(title)
         header.addStretch()
         header.addWidget(close_btn)
-        
-        layout.addLayout(header)
+        outer.addLayout(header)
+
+        # ── Scroll area wrapping all settings sections ────────────────────
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+
+        scroll_content = QWidget()
+        scroll_content.setStyleSheet("background: transparent;")
+        layout = QVBoxLayout(scroll_content)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(20)
+
+        scroll.setWidget(scroll_content)
+        outer.addWidget(scroll, 1)  # stretch = 1 so it fills remaining space
 
         # ============ Output Section ============
         output_section = QVBoxLayout()
@@ -633,9 +663,15 @@ class SettingsDialog(QDialog):
 
         layout.addStretch()
 
-        # ============ Buttons ============
+        # ── Buttons (always visible at bottom, not scrollable) ────────────
+        btn_separator = QFrame()
+        btn_separator.setFixedHeight(1)
+        btn_separator.setStyleSheet(f"background-color: {COLORS['border_subtle']};")
+        outer.addWidget(btn_separator)
+
         btn_row = QHBoxLayout()
         btn_row.setSpacing(10)
+        btn_row.setContentsMargins(0, 12, 0, 0)
 
         cancel_btn = QPushButton("取消")
         cancel_btn.setFixedSize(90, 40)
@@ -651,7 +687,7 @@ class SettingsDialog(QDialog):
         btn_row.addWidget(cancel_btn)
         btn_row.addWidget(save_btn)
 
-        layout.addLayout(btn_row)
+        outer.addLayout(btn_row)
 
     def _apply_hardware_status(self, status: str, color: str, warning_text: str):
         """Apply hardware status from background detection."""
@@ -705,6 +741,10 @@ class SettingsDialog(QDialog):
             if gpu_mode and workers > 1:
                 self.hw_warning_label.setText("提示：GPU 模式下将自动使用单进程，以避免并发争抢导致卡顿或失败。")
                 self.hw_warning_label.setVisible(True)
+            else:
+                # Clear conflict warning; hardware status warning is managed by _apply_hardware_status
+                if self.hw_warning_label.text().startswith("提示：GPU"):
+                    self.hw_warning_label.setVisible(False)
         except Exception:
             pass
 

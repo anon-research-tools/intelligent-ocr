@@ -4,3 +4,4 @@ paddleocr>=2.7.0
 PyMuPDF>=1.23.0
 numpy>=1.21.0
 PySide6>=6.6.0
+openpyxl>=3.1.0  # Required by paddlex 3.x (not listed in its pip deps)

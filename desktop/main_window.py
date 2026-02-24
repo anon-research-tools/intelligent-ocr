@@ -669,7 +669,6 @@ class MainWindow(QMainWindow):
         else:
             per_page = ""
             if self._processing_start_time and total_pages > 0:
-                delta = datetime.now() - self._processing_start_time
                 per_page_sec = delta.total_seconds() / total_pages
                 per_page = f"\n平均每页: {per_page_sec:.2f} 秒"
 
