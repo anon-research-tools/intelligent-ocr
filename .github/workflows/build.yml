@@ -78,7 +78,7 @@ jobs:
 
   build-macos-intel:
     name: Build macOS DMG (Intel)
-    runs-on: macos-12  # GitHub's Intel x86_64 runner
+    runs-on: macos-13  # GitHub's Intel x86_64 runner (macos-12 deprecated, queues forever)
     continue-on-error: true
     steps:
       - name: Checkout
