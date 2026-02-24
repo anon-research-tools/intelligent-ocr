@@ -6,12 +6,11 @@
 
 | 平台 | 下载 |
 |------|------|
-| 🍎 macOS (Apple Silicon) | [**智能OCR工具_macOS_arm64_v2.1.0.dmg**](https://github.com/anon-research-tools/intelligent-ocr/releases/download/v2.1.0/智能OCR工具_macOS_arm64_v2.1.0.dmg) |
-| 🪟 Windows 10/11 (64位) | [**智能OCR工具_安装程序_v2.1.0.exe**](https://github.com/anon-research-tools/intelligent-ocr/releases/download/v2.1.0/智能OCR工具_安装程序_v2.1.0.exe) |
+| 🍎 macOS (Apple Silicon M1/M2/M3/M4) | [**智能OCR工具_macOS_arm64_v2.1.0.dmg**](https://github.com/anon-research-tools/intelligent-ocr/releases/download/v2.1.0/OCR._macOS_arm64_v2.1.0.dmg) |
+| 🍎 macOS (Intel x86_64) | [**智能OCR工具_macOS_intel_v2.1.0.dmg**](https://github.com/anon-research-tools/intelligent-ocr/releases/download/v2.1.0/OCR._macOS_intel_v2.1.0.dmg) |
+| 🪟 Windows 10/11 (64位) | [**智能OCR工具_安装程序_v2.1.0.exe**](https://github.com/anon-research-tools/intelligent-ocr/releases/download/v2.1.0/OCR._._v2.1.0.exe) |
 
 👉 [查看所有版本](https://github.com/anon-research-tools/intelligent-ocr/releases)
-
-> **Intel Mac 用户**：v2.1.0 暂无 Intel 构建，请从[历史版本](https://github.com/anon-research-tools/intelligent-ocr/releases/tag/v2.0.2)下载 v2.0.2。
 
 > **首次启动**会自动下载 OCR 模型（约 200MB），需要联网。之后完全离线使用。
 
