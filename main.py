@@ -87,14 +87,45 @@ def main():
         if input_path in ('-h', '--help'):
             print(__doc__)
             print("Options:")
-            print("  -h, --help    Show this help message")
-            print("  <file.pdf>    Process a single PDF file")
+            print("  -h, --help       Show this help message")
+            print("  --smoke-test     Verify packaged app can import all modules")
+            print("  <file.pdf>       Process a single PDF file")
             return 0
+
+        if input_path == '--smoke-test':
+            return smoke_test()
 
         return cli_process(input_path)
 
     # GUI mode
     return gui_main()
+
+
+def smoke_test():
+    """Verify all critical imports work in the packaged app.
+
+    Used by CI after PyInstaller build to catch missing modules early.
+    Returns 0 on success, 1 on failure.
+    """
+    print("Smoke test: importing paddleocr...")
+    try:
+        from paddleocr import PaddleOCR
+        print("  OK: paddleocr")
+    except ImportError as e:
+        print(f"  FAIL: {e}")
+        return 1
+
+    print("Smoke test: importing core modules...")
+    try:
+        from core.ocr_engine import OCREngine
+        from core.pdf_processor import PDFProcessor
+        print("  OK: core modules")
+    except ImportError as e:
+        print(f"  FAIL: {e}")
+        return 1
+
+    print("Smoke test: all imports OK")
+    return 0
 
 
 def gui_main():

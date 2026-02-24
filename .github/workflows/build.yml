@@ -54,6 +54,14 @@ jobs:
           done
           echo "Build verification passed"
 
+      - name: Smoke test packaged binary
+        env:
+          PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: '1'
+        run: |
+          echo "Running import smoke test on packaged app..."
+          dist/智能OCR工具.app/Contents/MacOS/智能OCR工具 --smoke-test
+          echo "Smoke test passed"
+
       - name: Install create-dmg
         run: brew install create-dmg
 
@@ -111,6 +119,14 @@ jobs:
           done
           echo "Build verification passed"
 
+      - name: Smoke test packaged binary
+        env:
+          PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: '1'
+        run: |
+          echo "Running import smoke test on packaged app..."
+          dist/智能OCR工具.app/Contents/MacOS/智能OCR工具 --smoke-test
+          echo "Smoke test passed"
+
       - name: Install create-dmg
         run: brew install create-dmg
 
@@ -165,6 +181,15 @@ jobs:
             fi
           done
           echo "Build verification passed"
+
+      - name: Smoke test packaged binary
+        env:
+          PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: '1'
+        shell: cmd
+        run: |
+          echo Running import smoke test on packaged app...
+          "dist\智能OCR工具\智能OCR工具.exe" --smoke-test
+          echo Smoke test passed
 
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
