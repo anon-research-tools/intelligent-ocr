@@ -6,13 +6,13 @@
 
 | 平台 | 下载 |
 |------|------|
-| 🍎 macOS (Apple Silicon M1/M2/M3/M4) | [**智能OCR工具_macOS_arm64_v2.2.4.dmg**](https://github.com/anon-research-tools/intelligent-ocr/releases/download/v2.2.4/OCR._macOS_arm64_v2.2.4.dmg) |
-| 🍎 macOS (Intel x86_64) | [**智能OCR工具_macOS_intel_v2.2.4.dmg**](https://github.com/anon-research-tools/intelligent-ocr/releases/download/v2.2.4/OCR._macOS_intel_v2.2.4.dmg) |
-| 🪟 Windows 10/11 (64位) | [**智能OCR工具_安装程序_v2.2.4.exe**](https://github.com/anon-research-tools/intelligent-ocr/releases/download/v2.2.4/OCR._._v2.2.4.exe) |
+| 🍎 macOS (Apple Silicon M1/M2/M3/M4) | [**智能OCR工具_macOS_arm64_v2.2.5.dmg**](https://github.com/anon-research-tools/intelligent-ocr/releases/download/v2.2.5/OCR._macOS_arm64_v2.2.5.dmg) |
+| 🍎 macOS (Intel x86_64) | [**智能OCR工具_macOS_intel_v2.2.5.dmg**](https://github.com/anon-research-tools/intelligent-ocr/releases/download/v2.2.5/OCR._macOS_intel_v2.2.5.dmg) |
+| 🪟 Windows 10/11 (64位) | [**智能OCR工具_安装程序_v2.2.5.exe**](https://github.com/anon-research-tools/intelligent-ocr/releases/download/v2.2.5/OCR._._v2.2.5.exe) |
 
 👉 [查看所有版本](https://github.com/anon-research-tools/intelligent-ocr/releases)
 
-> **均衡模式**的 OCR 模型已内置，安装后即可离线使用。切换到「精准」或「快速」模式时会提示下载对应模型（约 100–200MB）。
+> **三种模式（快速 / 均衡 / 精准）的 OCR 模型均已内置**，安装后即可离线使用，无需额外下载。
 
 ---
 
@@ -97,10 +97,10 @@ macOS 首次打开若提示「无法验证开发者」：右键点击应用 → 
 ## 常见问题
 
 **Q: 首次启动很慢？**
-均衡模式模型已内置，无需下载。首次启动稍慢是因为加载模型到内存（约 10–20 秒），后续每次启动更快。
+三种模式（快速 / 均衡 / 精准）的模型均已内置，无需下载。首次启动稍慢是因为加载模型到内存（约 10–20 秒），后续每次启动更快。
 
 **Q: 处理速度多快？**
-Apple M 系列芯片约 8–15 秒/页（均衡模式），Windows Intel 约 15–25 秒/页。
+Apple M 系列芯片约 5–10 秒/页（快速模式），Windows Intel 约 11–20 秒/页。
 
 **Q: 支持多大的文件？**
 无硬性限制。流水线分页处理，内存占用恒定；断点续传保障超长任务可靠完成。
@@ -181,8 +181,8 @@ python -m pytest tests/ -v            # 运行测试
 推送 tag 即可触发 GitHub Actions 在 macOS 和 Windows 上自动构建并发布 Release：
 
 ```bash
-git tag v2.2.4
-git push origin v2.2.4
+git tag v2.2.5
+git push origin v2.2.5
 ```
 
 ---
