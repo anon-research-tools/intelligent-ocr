@@ -30,7 +30,7 @@ jobs:
           pip install -r requirements-desktop.txt
           pip install pyinstaller
 
-      - name: Download balanced OCR models for bundling
+      - name: Download all OCR models for bundling
         env:
           PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: '1'
         run: python scripts/download_models.py
@@ -45,7 +45,7 @@ jobs:
           echo "Checking app bundle..."
           test -d "dist/智能OCR工具.app" || { echo "FATAL: app bundle missing"; exit 1; }
           RES="dist/智能OCR工具.app/Contents/Resources"
-          for model in PP-OCRv5_mobile_det PP-OCRv5_server_rec PP-LCNet_x1_0_textline_ori; do
+          for model in PP-OCRv5_mobile_det PP-OCRv5_mobile_rec PP-OCRv5_server_det PP-OCRv5_server_rec PP-LCNet_x1_0_textline_ori; do
             if [ -d "$RES/models/$model" ]; then
               echo "  OK: $model (in Resources)"
             else
@@ -95,7 +95,7 @@ jobs:
           pip install -r requirements-intel-macos.txt
           pip install pyinstaller
 
-      - name: Download balanced OCR models for bundling
+      - name: Download all OCR models for bundling
         env:
           PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: '1'
         run: python scripts/download_models.py
@@ -110,7 +110,7 @@ jobs:
           echo "Checking app bundle..."
           test -d "dist/智能OCR工具.app" || { echo "FATAL: app bundle missing"; exit 1; }
           RES="dist/智能OCR工具.app/Contents/Resources"
-          for model in PP-OCRv5_mobile_det PP-OCRv5_server_rec PP-LCNet_x1_0_textline_ori; do
+          for model in PP-OCRv5_mobile_det PP-OCRv5_mobile_rec PP-OCRv5_server_det PP-OCRv5_server_rec PP-LCNet_x1_0_textline_ori; do
             if [ -d "$RES/models/$model" ]; then
               echo "  OK: $model (in Resources)"
             else
@@ -160,7 +160,7 @@ jobs:
           pip install -r requirements-desktop.txt
           pip install pyinstaller
 
-      - name: Download balanced OCR models for bundling
+      - name: Download all OCR models for bundling
         env:
           PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: '1'
         run: python scripts/download_models.py
@@ -174,7 +174,7 @@ jobs:
           echo "Checking dist directory..."
           test -d "dist/智能OCR工具" || { echo "FATAL: dist dir missing"; exit 1; }
           BASE="dist/智能OCR工具"
-          for model in PP-OCRv5_mobile_det PP-OCRv5_server_rec PP-LCNet_x1_0_textline_ori; do
+          for model in PP-OCRv5_mobile_det PP-OCRv5_mobile_rec PP-OCRv5_server_det PP-OCRv5_server_rec PP-LCNet_x1_0_textline_ori; do
             if [ -d "$BASE/models/$model" ] || [ -d "$BASE/_internal/models/$model" ]; then
               echo "  OK: $model"
             else

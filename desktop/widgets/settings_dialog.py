@@ -403,10 +403,10 @@ class SettingsDialog(QDialog):
 
         # Quality mode combo box
         self.quality_combo = QComboBox()
-        self.quality_combo.addItem("快速 (Fast) - 速度快，适合大批量", "fast")
-        self.quality_combo.addItem("平衡 (Balanced) - 推荐，兼顾速度和准确率", "balanced")
+        self.quality_combo.addItem("快速 (Fast) - 推荐，速度快，适合大批量", "fast")
+        self.quality_combo.addItem("平衡 (Balanced) - 兼顾速度和准确率", "balanced")
         self.quality_combo.addItem("高质量 (High) - 最准确，速度较慢", "high")
-        self.quality_combo.setCurrentIndex(1)  # Default: balanced
+        self.quality_combo.setCurrentIndex(0)  # Default: fast
         self.quality_combo.setFixedWidth(280)
         self.quality_combo.setStyleSheet(f"""
             QComboBox {{
@@ -907,7 +907,7 @@ class SettingsDialog(QDialog):
         )
 
         # Load performance settings
-        quality = settings.value("performance/quality", "balanced")
+        quality = settings.value("performance/quality", "fast")
         for i in range(self.quality_combo.count()):
             if self.quality_combo.itemData(i) == quality:
                 self.quality_combo.setCurrentIndex(i)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""下载均衡模式 OCR 模型，供 PyInstaller 打包使用。"""
+"""下载所有模式 OCR 模型（fast/balanced/high），供 PyInstaller 打包使用。"""
 import os
 import sys
 import shutil
@@ -11,23 +11,36 @@ MODELS_DIR.mkdir(exist_ok=True)
 os.environ['PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK'] = '1'
 
 REQUIRED_MODELS = [
-    'PP-OCRv5_mobile_det',        # balanced 模式检测
-    'PP-OCRv5_server_rec',        # balanced 模式识别
+    'PP-OCRv5_mobile_det',        # fast/balanced 模式检测
+    'PP-OCRv5_mobile_rec',        # fast 模式识别
+    'PP-OCRv5_server_det',        # high 模式检测
+    'PP-OCRv5_server_rec',        # balanced/high 模式识别
     'PP-LCNet_x1_0_textline_ori', # 文本行方向分类
 ]
 
-print(f"Downloading balanced mode models: {REQUIRED_MODELS}")
+print(f"Downloading all mode models (fast/balanced/high): {REQUIRED_MODELS}")
 print(f"Target: {MODELS_DIR}")
 
 from paddleocr import PaddleOCR
 
+# Download fast mode models (mobile_det + mobile_rec)
 PaddleOCR(
     lang='ch',
     text_detection_model_name='PP-OCRv5_mobile_det',
-    text_recognition_model_name='PP-OCRv5_server_rec',
+    text_recognition_model_name='PP-OCRv5_mobile_rec',
     use_doc_orientation_classify=False,
     use_doc_unwarping=False,
     use_textline_orientation=True,
+)
+
+# Download high mode models (server_det + server_rec)
+PaddleOCR(
+    lang='ch',
+    text_detection_model_name='PP-OCRv5_server_det',
+    text_recognition_model_name='PP-OCRv5_server_rec',
+    use_doc_orientation_classify=False,
+    use_doc_unwarping=False,
+    use_textline_orientation=False,
 )
 
 print("Download complete. Copying to models/ ...")
