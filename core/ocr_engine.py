@@ -6,6 +6,22 @@ from pathlib import Path
 from typing import Optional
 import numpy as np
 
+# Workaround for PaddlePaddle 3.3.0+ PIR→oneDNN regression.
+# The bug is in PIR executor's oneDNN conversion (ConvertPirAttribute2RuntimeAttribute).
+# Disabling PIR *before* importing paddle lets oneDNN still work via the old executor,
+# preserving performance. FLAGS_enable_pir_api must be set before `import paddle`.
+# See: https://github.com/PaddlePaddle/Paddle/issues/77340
+import os as _os
+if 'FLAGS_enable_pir_api' not in _os.environ:
+    try:
+        from importlib.metadata import version as _pkg_version
+        _paddle_ver = _pkg_version('paddlepaddle')
+        _major, _minor = (int(x) for x in _paddle_ver.split('.')[:2])
+        if _major >= 3 and _minor >= 3:
+            _os.environ['FLAGS_enable_pir_api'] = '0'
+    except Exception:
+        pass
+
 
 def _get_bundled_models_dir() -> Optional[Path]:
     """Return the models/ path bundled inside a PyInstaller frozen app, or None.
@@ -261,22 +277,6 @@ class OCREngine:
             'use_textline_orientation': True,       # 检测竖排/横排文字
             'device': self._device_str,
         }
-
-        # Workaround for PaddlePaddle 3.3.0+ PIR→oneDNN regression
-        # (ConvertPirAttribute2RuntimeAttribute not support pir::ArrayAttribute)
-        # PaddleX ignores FLAGS_use_mkldnn; must pass enable_mkldnn=False to PaddleOCR
-        # See: https://github.com/PaddlePaddle/Paddle/issues/77340
-        try:
-            import paddle
-            paddle_ver = tuple(int(x) for x in paddle.__version__.split('.')[:2])
-            if paddle_ver >= (3, 3):
-                ocr_kwargs['enable_mkldnn'] = False
-                logging.getLogger(__name__).warning(
-                    "PaddlePaddle %s: disabling oneDNN to avoid PIR conversion bug",
-                    paddle.__version__
-                )
-        except Exception:
-            pass
 
         # Resolve model directories: bundled models > PaddleX cache > auto-download
         bundled_dir = _get_bundled_models_dir()
