@@ -262,6 +262,22 @@ class OCREngine:
             'device': self._device_str,
         }
 
+        # Workaround for PaddlePaddle 3.3.0+ PIR→oneDNN regression
+        # (ConvertPirAttribute2RuntimeAttribute not support pir::ArrayAttribute)
+        # PaddleX ignores FLAGS_use_mkldnn; must pass enable_mkldnn=False to PaddleOCR
+        # See: https://github.com/PaddlePaddle/Paddle/issues/77340
+        try:
+            import paddle
+            paddle_ver = tuple(int(x) for x in paddle.__version__.split('.')[:2])
+            if paddle_ver >= (3, 3):
+                ocr_kwargs['enable_mkldnn'] = False
+                logging.getLogger(__name__).warning(
+                    "PaddlePaddle %s: disabling oneDNN to avoid PIR conversion bug",
+                    paddle.__version__
+                )
+        except Exception:
+            pass
+
         # Resolve model directories: bundled models > PaddleX cache > auto-download
         bundled_dir = _get_bundled_models_dir()
         paddlex_cache = _get_paddlex_cache_dir()

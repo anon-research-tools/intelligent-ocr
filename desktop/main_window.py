@@ -33,7 +33,7 @@ class MainWindow(QMainWindow):
     Width: 520px (matching design file)
     """
 
-    VERSION = "2.2.3"
+    VERSION = "2.2.4"
 
     def __init__(self):
         super().__init__()
