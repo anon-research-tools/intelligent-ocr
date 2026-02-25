@@ -7,6 +7,7 @@
 | 平台 | 下载 |
 |------|------|
 | 🍎 macOS (Apple Silicon M1/M2/M3/M4) | [**智能OCR工具_macOS_arm64_v2.2.3.dmg**](https://github.com/anon-research-tools/intelligent-ocr/releases/download/v2.2.3/OCR._macOS_arm64_v2.2.3.dmg) |
+| 🍎 macOS (Intel x86_64) | [**智能OCR工具_macOS_intel_v2.2.3.dmg**](https://github.com/anon-research-tools/intelligent-ocr/releases/download/v2.2.3/OCR._macOS_intel_v2.2.3.dmg) |
 | 🪟 Windows 10/11 (64位) | [**智能OCR工具_安装程序_v2.2.3.exe**](https://github.com/anon-research-tools/intelligent-ocr/releases/download/v2.2.3/OCR._._v2.2.3.exe) |
 
 👉 [查看所有版本](https://github.com/anon-research-tools/intelligent-ocr/releases)
