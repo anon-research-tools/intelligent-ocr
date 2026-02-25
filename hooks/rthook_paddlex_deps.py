@@ -8,6 +8,16 @@ import sys
 
 # Only apply in frozen/packaged environment
 if getattr(sys, 'frozen', False):
+    # Fix paddle/base/core.py crash: site.getsitepackages() can return
+    # [None, ...] in PyInstaller, causing os.path.sep.join() to fail with
+    # "sequence item 0: expected str instance, NoneType found".
+    import site as _site
+    if hasattr(_site, 'getsitepackages'):
+        _orig_getsitepackages = _site.getsitepackages
+        def _patched_getsitepackages():
+            return [p for p in _orig_getsitepackages() if p is not None]
+        _site.getsitepackages = _patched_getsitepackages
+
     import importlib.metadata
     import importlib.util
 
