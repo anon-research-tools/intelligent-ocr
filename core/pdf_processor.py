@@ -1212,7 +1212,7 @@ class PDFProcessor:
                         True if item was put successfully, False if cancelled or max retries exceeded.
                     """
                     retry_count = 0
-                    max_retries = 120  # 120 * 0.5s = 60 seconds max wait (OCR can take 10-30s per page)
+                    max_retries = 720  # 720 * 0.5s = 360 seconds max wait (without oneDNN, batch of 4 pages can take 2+ min)
                     while retry_count < max_retries:
                         if cancel_event and cancel_event.is_set():
                             return False  # Cancelled, don't put
