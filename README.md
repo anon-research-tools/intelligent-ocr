@@ -6,13 +6,13 @@
 
 | 平台 | 下载 |
 |------|------|
-| 🍎 macOS (Apple Silicon M1/M2/M3/M4) | [**智能OCR工具_macOS_arm64_v2.2.5.dmg**](https://github.com/anon-research-tools/intelligent-ocr/releases/download/v2.2.5/OCR._macOS_arm64_v2.2.5.dmg) |
-| 🍎 macOS (Intel x86_64) | [**智能OCR工具_macOS_intel_v2.2.5.dmg**](https://github.com/anon-research-tools/intelligent-ocr/releases/download/v2.2.5/OCR._macOS_intel_v2.2.5.dmg) |
-| 🪟 Windows 10/11 (64位) | [**智能OCR工具_安装程序_v2.2.5.exe**](https://github.com/anon-research-tools/intelligent-ocr/releases/download/v2.2.5/OCR._._v2.2.5.exe) |
+| 🍎 macOS (Apple Silicon M1/M2/M3/M4) | [**智能OCR工具_macOS_arm64_v2.2.6.dmg**](https://github.com/anon-research-tools/intelligent-ocr/releases/download/v2.2.6/OCR._macOS_arm64_v2.2.6.dmg) |
+| 🍎 macOS (Intel x86_64) | [**智能OCR工具_macOS_intel_v2.2.6.dmg**](https://github.com/anon-research-tools/intelligent-ocr/releases/download/v2.2.6/OCR._macOS_intel_v2.2.6.dmg) |
+| 🪟 Windows 10/11 (64位) | [**智能OCR工具_安装程序_v2.2.6.exe**](https://github.com/anon-research-tools/intelligent-ocr/releases/download/v2.2.6/OCR._._v2.2.6.exe) |
 
 👉 [查看所有版本](https://github.com/anon-research-tools/intelligent-ocr/releases)
 
-> **三种模式（快速 / 均衡 / 精准）的 OCR 模型均已内置**，安装后即可离线使用，无需额外下载。
+> **两种模式（快速 / 均衡）的 OCR 模型均已内置**，安装后即可离线使用，无需额外下载。
 
 ---
 
@@ -76,11 +76,10 @@ macOS 首次打开若提示「无法验证开发者」：右键点击应用 → 
 | 选项 | 说明 |
 |------|------|
 | 识别语言 | 中文 / 英文 / 日文（可多选） |
-| 识别质量 | 快速 / 均衡 / 精准 |
+| 识别质量 | 快速 / 均衡 |
 | DPI | 渲染分辨率，300 DPI 为推荐值 |
-| 并行线程数 | 多核加速，默认自动检测（建议 ≤2） |
+| 异体字归并 | 搜"藏"也能找到"蔵"，默认开启 |
 | 跳过已有文字 | 跳过已含文字层的页面，避免重复处理 |
-| 断点续传 | 开启后支持中断恢复 |
 | 导出 TXT / Markdown | 同时导出纯文字或 Markdown 格式 |
 
 ---
@@ -97,7 +96,7 @@ macOS 首次打开若提示「无法验证开发者」：右键点击应用 → 
 ## 常见问题
 
 **Q: 首次启动很慢？**
-三种模式（快速 / 均衡 / 精准）的模型均已内置，无需下载。首次启动稍慢是因为加载模型到内存（约 10–20 秒），后续每次启动更快。
+两种模式（快速 / 均衡）的模型均已内置，无需下载。首次启动稍慢是因为加载模型到内存（约 10–20 秒），后续每次启动更快。
 
 **Q: 处理速度多快？**
 Apple M 系列芯片约 5–10 秒/页（快速模式），Windows Intel 约 11–20 秒/页。
@@ -119,12 +118,12 @@ Apple M 系列芯片约 5–10 秒/页（快速模式），Windows Intel 约 11�
 ```
 ocr_tool/
 ├── core/                        # 平台无关的核心处理层
-│   ├── ocr_engine.py            # PaddleOCR 封装，支持 fast/balanced/high 三种质量模式
+│   ├── ocr_engine.py            # PaddleOCR 封装，支持 fast/balanced 两种质量模式
 │   ├── pdf_processor.py         # 主处理管道：流水线渲染、双层 PDF 合成、多格式导出
 │   ├── checkpoint.py            # 断点续传：JSON 检查点，记录已完成/跳过/失败页面
 │   ├── task_manager.py          # 任务队列，PENDING→PROCESSING→COMPLETED/FAILED
 │   ├── parallel_ocr.py          # 多进程并行 OCR（spawn 模式，兼容 PaddlePaddle）
-│   └── variants.py              # 异体字映射器，10,556 条规则
+│   └── variants.py              # 异体字映射器，10,556 条规则（数据内嵌）
 │
 ├── desktop/                     # PySide6 桌面 GUI 层（Apple 风格设计）
 │   ├── main_window.py           # 主窗口，懒加载 OCR 模型（节省 ~500MB 启动内存）
@@ -147,7 +146,6 @@ ocr_tool/
 │   └── windows/setup.iss        # Inno Setup Windows 安装脚本
 │
 ├── .github/workflows/build.yml  # GitHub Actions 自动构建（macOS + Windows）
-├── variants.txt                 # 10,556 条异体字映射表
 ├── main.py                      # 入口：GUI 模式 / CLI 模式
 └── ocr_tool.spec                # PyInstaller 打包配置
 ```
@@ -181,8 +179,8 @@ python -m pytest tests/ -v            # 运行测试
 推送 tag 即可触发 GitHub Actions 在 macOS 和 Windows 上自动构建并发布 Release：
 
 ```bash
-git tag v2.2.5
-git push origin v2.2.5
+git tag v2.2.6
+git push origin v2.2.6
 ```
 
 ---
