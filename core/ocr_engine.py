@@ -263,11 +263,9 @@ class OCREngine:
             'device': self._device_str,
         }
 
-        # Workaround for PaddlePaddle 3.3.0+ PIR→oneDNN regression
-        # (ConvertPirAttribute2RuntimeAttribute not support pir::ArrayAttribute)
-        # FLAGS_enable_pir_api=0 does NOT help — inference engine has its own PIR path.
-        # enable_mkldnn=False is the ONLY working fix (confirmed on Windows).
-        # Performance impact mitigated by increasing pipeline stall timeout.
+        # Disable oneDNN/MKL-DNN on PaddlePaddle 3.3.0+ to avoid PIR conversion bug.
+        # (Paddle#77340: ArrayAttribute<DoubleAttribute> not supported in PIR→oneDNN)
+        # On < 3.3.0, oneDNN works correctly and provides ~10x speedup on x86_64.
         # See: https://github.com/PaddlePaddle/Paddle/issues/77340
         try:
             import paddle

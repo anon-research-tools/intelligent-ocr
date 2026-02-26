@@ -4,7 +4,9 @@ Checkpoint Manager - Support for resume from breakpoint
 Saves processing state after each page, allowing recovery if interrupted.
 """
 import json
+import logging
 import os
+import time as _time
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
@@ -166,7 +168,7 @@ class CheckpointManager:
         return checkpoint
 
     def save_checkpoint(self, checkpoint: Checkpoint):
-        """Save checkpoint to file"""
+        """Save checkpoint to file with retry for Windows antivirus file locks."""
         checkpoint.updated_at = datetime.now().isoformat()
         checkpoint_path = self._get_checkpoint_path(checkpoint.input_path)
 
@@ -174,14 +176,25 @@ class CheckpointManager:
         temp_path = checkpoint_path.with_suffix('.tmp')
         with open(temp_path, 'w', encoding='utf-8') as f:
             json.dump(checkpoint.to_dict(), f, ensure_ascii=False, indent=2)
-        try:
-            # os.replace() works atomically and overwrites on Windows
-            # (Path.rename() fails with WinError 183 if target exists)
-            import os
-            os.replace(temp_path, checkpoint_path)
-        except OSError:
-            temp_path.unlink(missing_ok=True)  # Clean up temp file on failure
-            raise
+
+        # Retry os.replace() up to 4 times with exponential backoff.
+        # Windows antivirus may briefly lock the target file after a write.
+        last_err: OSError | None = None
+        for attempt in range(4):
+            try:
+                os.replace(temp_path, checkpoint_path)
+                return
+            except OSError as e:
+                last_err = e
+                if attempt < 3:
+                    _time.sleep(0.2 * (2 ** attempt))  # 0.2s, 0.4s, 0.8s
+                    continue
+        # All retries exhausted
+        temp_path.unlink(missing_ok=True)
+        logging.getLogger(__name__).warning(
+            "save_checkpoint failed after 4 attempts: %s", last_err
+        )
+        raise last_err  # type: ignore[misc]
 
     def load_checkpoint(self, input_path: str) -> Optional[Checkpoint]:
         """

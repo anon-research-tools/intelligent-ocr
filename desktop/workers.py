@@ -14,12 +14,14 @@ from PySide6.QtCore import QThread, Signal, QObject, QSettings
 
 def _get_variants_path() -> str | None:
     """
-    Get the path to variants.txt for variant character support.
+    Get the path to variants.txt for variant character support (development mode).
+
+    In production, VariantMapper uses embedded data and this returns None.
+    In development, returns the path if variants.txt exists on disk.
 
     Returns:
         Path to variants.txt if it exists, None otherwise.
     """
-    # variants.txt is in the ocr_tool directory (same level as desktop/)
     variants_file = Path(__file__).parent.parent / "variants.txt"
     if variants_file.exists():
         return str(variants_file)
@@ -177,10 +179,14 @@ class OCRWorker(QThread):
                 use_gpu=effective_gpu,
                 quality=effective_quality,
             )
+            settings = QSettings("SmartOCR", "OCRTool")
+            enable_variants = settings.value("ocr/enable_variants", True, type=bool)
+
             self._pdf_processor = PDFProcessor(
                 self._ocr_engine,
                 dpi=effective_dpi,
                 variants_path=_get_variants_path(),
+                enable_variants=enable_variants,
                 num_workers=effective_workers,
                 image_mode=effective_image_mode,
                 page_retry_limit=self.page_retry_limit,
@@ -273,6 +279,8 @@ class OCRWorker(QThread):
             "ioerror",
             "cuda",
             "rocm",
+            "child process terminated",
+            "process pool is not usable",
         ]
         if any(token in msg for token in retryable_tokens):
             return "retryable"
@@ -446,10 +454,14 @@ class SingleFileWorker(QThread):
                 use_gpu=self.use_gpu,
                 quality=self.quality,
             )
+            settings = QSettings("SmartOCR", "OCRTool")
+            enable_variants = settings.value("ocr/enable_variants", True, type=bool)
+
             processor = PDFProcessor(
                 engine,
                 dpi=self.dpi,
                 variants_path=_get_variants_path(),
+                enable_variants=enable_variants,
                 num_workers=self.num_workers,
                 image_mode=self.image_mode,
                 page_retry_limit=self.page_retry_limit,
@@ -497,20 +509,15 @@ def get_performance_settings() -> dict:
 
     Returns:
         Dict with 'quality', 'num_workers', 'use_gpu', retry and image options.
-        num_workers=0 means auto-detect.
         use_gpu=None means auto-detect hardware.
     """
     settings = QSettings("SmartOCR", "OCRTool")
-    quality = settings.value("performance/quality", "balanced")
-    num_workers = settings.value("performance/num_workers", 0, type=int)
-
-    # Handle auto-detect (0 = auto)
-    if num_workers == 0:
-        try:
-            from core.parallel_ocr import _detect_optimal_workers
-            num_workers = _detect_optimal_workers()
-        except Exception:
-            num_workers = 1  # Fallback to single-process
+    quality = settings.value("performance/quality", "fast")
+    # Migrate removed "high" quality to "balanced" for existing users
+    if quality == "high":
+        quality = "balanced"
+    # Fixed to single-process for stability (parallel removed from UI)
+    num_workers = 1
 
     # GPU override: 'auto' (None), 'cpu' (False), 'gpu' (True)
     gpu_override = settings.value("performance/gpu_override", "auto")
@@ -519,19 +526,6 @@ def get_performance_settings() -> dict:
         use_gpu = False
     elif gpu_override == "gpu":
         use_gpu = True
-
-    # Guardrail: GPU mode uses single worker to avoid process contention.
-    is_gpu_mode = False
-    if use_gpu is True:
-        is_gpu_mode = True
-    elif use_gpu is None:
-        try:
-            from core.hardware import get_device_string
-            is_gpu_mode = get_device_string().startswith("gpu")
-        except Exception:
-            is_gpu_mode = False
-    if is_gpu_mode and num_workers > 1:
-        num_workers = 1
 
     return {
         'quality': quality,

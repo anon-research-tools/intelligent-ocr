@@ -401,11 +401,10 @@ class SettingsDialog(QDialog):
         perf_layout.setSpacing(0)
         perf_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Quality mode combo box
+        # Quality mode combo box (only fast and balanced; high removed for stability)
         self.quality_combo = QComboBox()
         self.quality_combo.addItem("快速 (Fast) - 推荐，速度快，适合大批量", "fast")
         self.quality_combo.addItem("平衡 (Balanced) - 兼顾速度和准确率", "balanced")
-        self.quality_combo.addItem("高质量 (High) - 最准确，速度较慢", "high")
         self.quality_combo.setCurrentIndex(0)  # Default: fast
         self.quality_combo.setFixedWidth(280)
         self.quality_combo.setStyleSheet(f"""
@@ -451,60 +450,27 @@ class SettingsDialog(QDialog):
         sep_perf.setStyleSheet(f"background-color: {COLORS['border_subtle']};")
         perf_layout.addWidget(sep_perf)
 
-        # Parallel workers combo box
-        self.workers_combo = QComboBox()
+        # Variant character normalization toggle
+        variants_widget = QWidget()
+        variants_layout = QHBoxLayout(variants_widget)
+        variants_layout.setSpacing(12)
+        variants_layout.setContentsMargins(12, 12, 12, 12)
 
-        # Get recommended workers from system info
-        try:
-            from core.parallel_ocr import get_system_info
-            sys_info = get_system_info()
-            recommended = sys_info['recommended_workers']
-        except Exception:
-            recommended = 2
-
-        self.workers_combo.addItem(f"自动 ({recommended} 进程)", 0)
-        self.workers_combo.addItem("1 进程 (最省内存)", 1)
-        self.workers_combo.addItem("2 进程 (推荐)", 2)
-        self.workers_combo.addItem("3 进程", 3)
-        self.workers_combo.addItem("4 进程 (高性能，需大内存)", 4)
-        self.workers_combo.setCurrentIndex(0)  # Default: auto
-        self.workers_combo.setFixedWidth(280)
-        self.workers_combo.setStyleSheet(f"""
-            QComboBox {{
-                background: {COLORS['bg_surface']};
-                border: 1px solid {COLORS['border_subtle']};
-                border-radius: 6px;
-                padding: 6px 10px;
-                font-size: 13px;
-                color: {COLORS['text_primary']};
-                font-family: 'Helvetica Neue', 'PingFang SC';
-            }}
-            QComboBox:hover {{
-                border-color: {COLORS['accent_primary']};
-            }}
-            QComboBox::drop-down {{
-                border: none;
-                width: 20px;
-            }}
-            QComboBox::down-arrow {{
-                image: none;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-top: 5px solid {COLORS['text_tertiary']};
-                margin-right: 8px;
-            }}
-            QComboBox QAbstractItemView {{
-                background: {COLORS['bg_primary']};
-                border: 1px solid {COLORS['border_subtle']};
-                border-radius: 6px;
-                selection-background-color: {COLORS['accent_primary']};
-                selection-color: white;
-                padding: 4px;
-            }}
+        variants_label = QLabel('异体字归并（搜\u201c藏\u201d也能找到\u201c蔵\u201d）')
+        variants_label.setStyleSheet(f"""
+            font-size: 13px;
+            font-weight: 500;
+            color: {COLORS['text_primary']};
+            font-family: 'Helvetica Neue', 'PingFang SC';
         """)
 
-        workers_row = self._create_row("并行进程数", self.workers_combo)
-        perf_layout.addLayout(workers_row)
+        self.toggles["variants_toggle"] = ToggleSwitch(checked=True)
+
+        variants_layout.addWidget(variants_label)
+        variants_layout.addStretch()
+        variants_layout.addWidget(self.toggles["variants_toggle"])
+
+        perf_layout.addWidget(variants_widget)
 
         perf_section.addWidget(perf_card)
         layout.addLayout(perf_section)
@@ -585,9 +551,6 @@ class SettingsDialog(QDialog):
         """)
         gpu_row = self._create_row("计算设备", self.gpu_combo)
         hw_layout.addLayout(gpu_row)
-        self.gpu_combo.currentIndexChanged.connect(lambda _: self._warn_gpu_workers_conflict())
-        self.workers_combo.currentIndexChanged.connect(lambda _: self._warn_gpu_workers_conflict())
-
         # Warning label (shown only when hardware has warnings)
         self.hw_warning_label = QLabel("")
         self.hw_warning_label.setWordWrap(True)
@@ -733,20 +696,6 @@ class SettingsDialog(QDialog):
 
         threading.Thread(target=_worker, daemon=True).start()
 
-    def _warn_gpu_workers_conflict(self):
-        """Show non-blocking warning when GPU override is combined with multi-process."""
-        try:
-            gpu_mode = self.gpu_combo.currentData() in {"gpu"}
-            workers = int(self.workers_combo.currentData())
-            if gpu_mode and workers > 1:
-                self.hw_warning_label.setText("提示：GPU 模式下将自动使用单进程，以避免并发争抢导致卡顿或失败。")
-                self.hw_warning_label.setVisible(True)
-            else:
-                # Clear conflict warning; hardware status warning is managed by _apply_hardware_status
-                if self.hw_warning_label.text().startswith("提示：GPU"):
-                    self.hw_warning_label.setVisible(False)
-        except Exception:
-            pass
 
     def _on_dpi_clicked(self):
         """Handle DPI button click"""
@@ -839,8 +788,11 @@ class SettingsDialog(QDialog):
 
         # Performance settings
         settings.setValue("performance/quality", self.quality_combo.currentData())
-        settings.setValue("performance/num_workers", self.workers_combo.currentData())
+        settings.setValue("performance/num_workers", 1)  # Fixed single-process for stability
         settings.setValue("performance/gpu_override", self.gpu_combo.currentData())
+
+        # Variant character normalization
+        settings.setValue("ocr/enable_variants", self.toggles["variants_toggle"].isChecked())
         settings.setValue("output/image_mode", self.image_mode_combo.currentData())
         settings.setValue("performance/auto_retry_enabled", True)
         settings.setValue("performance/max_retries", 2)
@@ -906,18 +858,19 @@ class SettingsDialog(QDialog):
             settings.value("export/md_images", False, type=bool)
         )
 
-        # Load performance settings
+        # Load performance settings (map removed "high" to "balanced")
         quality = settings.value("performance/quality", "fast")
+        if quality == "high":
+            quality = "balanced"
         for i in range(self.quality_combo.count()):
             if self.quality_combo.itemData(i) == quality:
                 self.quality_combo.setCurrentIndex(i)
                 break
 
-        num_workers = settings.value("performance/num_workers", 0, type=int)
-        for i in range(self.workers_combo.count()):
-            if self.workers_combo.itemData(i) == num_workers:
-                self.workers_combo.setCurrentIndex(i)
-                break
+        # Load variant character toggle
+        self.toggles["variants_toggle"].setChecked(
+            settings.value("ocr/enable_variants", True, type=bool)
+        )
 
         # Load GPU override
         gpu_override = settings.value("performance/gpu_override", "auto")
@@ -928,4 +881,3 @@ class SettingsDialog(QDialog):
 
         # Populate hardware status (best-effort, don't block UI if paddle not installed)
         self._refresh_hardware_status()
-        self._warn_gpu_workers_conflict()

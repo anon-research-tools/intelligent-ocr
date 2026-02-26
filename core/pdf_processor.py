@@ -383,6 +383,7 @@ class PDFProcessor:
         prefetch_pages: int = 4,
         blank_page_threshold: float = 0.5,
         variants_path: Optional[str] = None,
+        enable_variants: bool = True,
         num_workers: int = 1,
         image_mode: str = "lossy_85",
         page_retry_limit: int = 2,
@@ -400,7 +401,9 @@ class PDFProcessor:
                 Lower values = more strict (only skip truly blank pages)
                 Default 0.5 is very conservative to avoid false positives
             variants_path: Path to variants.txt file for variant character support.
-                When provided, normalized text is also inserted for better search.
+                When provided, used instead of embedded data.
+            enable_variants: Whether to enable variant character normalization.
+                When True (default), uses variants_path if given, else embedded data.
             num_workers: Number of parallel OCR worker processes.
                 1 = single-process mode (original behavior)
                 >1 = multi-process parallel OCR for faster processing
@@ -416,7 +419,10 @@ class PDFProcessor:
         self.min_confidence = min_confidence
         self.prefetch_pages = prefetch_pages
         self.blank_page_threshold = blank_page_threshold
-        self.variant_mapper = VariantMapper(variants_path) if variants_path else None
+        if enable_variants:
+            self.variant_mapper = VariantMapper(variants_path)
+        else:
+            self.variant_mapper = None
         self.num_workers = max(1, num_workers)
         self.image_mode = image_mode if image_mode in {"lossy_85", "lossless"} else "lossy_85"
         self.page_retry_limit = max(0, int(page_retry_limit))
@@ -537,7 +543,7 @@ class PDFProcessor:
                         pass
 
             # Save output
-            output_doc.save(output_path, garbage=4, deflate=True)
+            output_doc.save(output_path, garbage=1, deflate=True)
             result.success = True
 
         except Exception as e:
@@ -1172,7 +1178,13 @@ class PDFProcessor:
                     result.fallback_pages = sorted(p + 1 for p in fallback_pages)
                     result.errors.append(f"Page {page_num + 1}: OCR失败后回填原页（{reason}）")
                     if checkpoint and checkpoint_mgr:
-                        checkpoint_mgr.mark_page_failed(checkpoint, page_num)
+                        try:
+                            checkpoint_mgr.mark_page_failed(checkpoint, page_num)
+                        except Exception as _cp_err:
+                            import logging
+                            logging.getLogger(__name__).warning(
+                                "checkpoint mark_page_failed error (non-fatal): %s", _cp_err
+                            )
                     if progress_callback:
                         progress_callback(page_num + 1, result.total_pages)
                 except Exception as copy_exc:
@@ -1591,7 +1603,7 @@ class PDFProcessor:
                     )
 
                 # Completed - save final output
-                output_doc.save(output_path, garbage=4, deflate=True)
+                output_doc.save(output_path, garbage=1, deflate=True)
                 output_doc.close()
                 input_doc.close()
 
@@ -1609,7 +1621,7 @@ class PDFProcessor:
             if checkpoint and checkpoint_mgr and temp_output_path:
                 try:
                     if 'output_doc' in dir() and output_doc:
-                        output_doc.save(temp_output_path, garbage=4, deflate=True)
+                        output_doc.save(temp_output_path, garbage=1, deflate=True)
                         checkpoint_mgr.save_checkpoint(checkpoint)
                         output_doc.close()
                 except Exception:
